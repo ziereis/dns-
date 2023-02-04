@@ -6,14 +6,25 @@ namespace
 {
     constexpr uint8_t JUMP_MASK = 0b1100'0000;
     constexpr uint8_t MAX_JUMPS = 5;
+    constexpr uint8_t FLAG_SIZE = 2;
 }
 namespace Dns
 {
-
-    DnsHeader read_header() {
-        if (bytes_read < sizeof(header_))
+    DnsHeader BufferParser::read_header() {
+        DnsHeader header{};
+        if (buf_view.size() < sizeof(header))
             throw std::invalid_argument{"size of bytes read too small"};
+        header.id = read<uint16_t>();
+        std::memcpy(buf_view.data() + sizeof(uint16_t), &header, FLAG_SIZE);
+        seek(position + FLAG_SIZE);
+
+        header.question_count = read<uint16_t>();
+        header.answer_count = read<uint16_t>();
+        header.authority_count = read<uint16_t>();
+        header.addtional_count = read<uint16_t>();
+        return header;
     }
+
     DnsQuestion BufferParser::read_question(){
         return {read_name(),read<uint16_t>(), read<uint16_t>()};
     }

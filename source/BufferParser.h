@@ -6,6 +6,7 @@ namespace Dns
     class BufferParser
     {
 public:
+        DnsHeader read_header();
         DnsQuestion read_question();
         DnsAnswer read_answer();
 

@@ -9,16 +9,36 @@
 namespace Dns
 {
     DnsPacket::DnsPacket(std::array<uint8_t, DNS_BUF_SIZE>& buf, size_t bytes_read)
-    : header_{}
+    : header_{}, questions{}, answers{}, authorities{}, additionals{}
     {
-        if (bytes_read < sizeof(header_))
-            throw std::invalid_argument{"size of bytes read too small"};
+        BufferParser parser{std::span(buf)};
+        header_ = parser.read_header();
+        LOG(header_);
 
-        std::memcpy(&buf,&header_, sizeof(header_));
+        for(size_t i = 0; i < header_.question_count; i++)
+            questions.emplace_back(parser.read_question());
 
-        BufferParser parser{std::span(buf).subspan(12)};
+        for(size_t i = 0; i < header_.answer_count; i++)
+            answers.emplace_back(parser.read_answer());
 
-        std::cout << parser.read_question() << std::endl;
+        for(size_t i = 0; i < header_.authority_count; i++)
+            authorities.emplace_back(parser.read_answer());
+
+        for(size_t i = 0; i < header_.addtional_count; i++)
+            additionals.emplace_back(parser.read_answer());
+
+#if ENABLE_DEBUG_LOG
+        for(auto& q : questions)
+            std::cout << q << std::endl;
+        for(auto& q : answers)
+            std::cout << q << std::endl;
+        for(auto& q : authorities)
+            std::cout << q << std::endl;
+        for(auto& q : additionals)
+            std::cout << q << std::endl;
+#endif
+
+
     }
 
     std::ostream& operator<<(std::ostream &os, const DnsHeader &header) {
@@ -45,4 +65,13 @@ namespace Dns
         return os;
     }
 
+
+
+    std::ostream &operator<<(std::ostream &os, const DnsAnswer &answer) {
+        os << "name: " << answer.name << " query_type: " << static_cast<int>(answer.query_type) << " query_class: " << answer.query_class
+           << " ttl: " << answer.ttl << " len: " << answer.len << " record: ";
+
+        std::visit([](auto& cur){std::cout << "record_type: " << type_name<decltype(cur)>() << std::endl;}, answer.record);
+        return os;
+    }
 }

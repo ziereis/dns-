@@ -28,7 +28,7 @@ namespace Dns
     struct __attribute__((packed)) DnsHeader
     {
 
-        big_uint16_buf_t id;
+        uint16_t id;
 
         uint8_t query_response :1;
         uint8_t op_code :4;
@@ -38,12 +38,12 @@ namespace Dns
 
         uint8_t recursion_available :1;
         uint8_t reserved :3;
-        uint8_t response_code :4; // authoritive answer
+        uint8_t response_code :4;
 
-        big_uint16_buf_t question_count;
-        big_uint16_buf_t answer_count;
-        big_uint16_buf_t authority_count;
-        big_uint16_buf_t addtional_count;
+        uint16_t question_count;
+        uint16_t answer_count;
+        uint16_t authority_count;
+        uint16_t addtional_count;
 
         friend std::ostream &operator<<(std::ostream &os, const DnsHeader &header);
     };
@@ -82,6 +82,8 @@ namespace Dns
         uint32_t ttl;
         uint16_t len;
         DnsRecord record;
+
+        friend std::ostream &operator<<(std::ostream &os, const DnsAnswer &answer);
     };
 
     class DnsPacket
@@ -91,7 +93,13 @@ namespace Dns
         DnsPacket(std::array<uint8_t, DNS_BUF_SIZE>& buf, size_t bytes_read);
 
         Dns::DnsHeader header_;
+        std::vector<DnsQuestion> questions;
+        std::vector<DnsAnswer> answers;
+        std::vector<DnsAnswer> authorities;
+        std::vector<DnsAnswer> additionals;
+
 
     };
+    template <typename T> std::string type_name(){}
 
 }

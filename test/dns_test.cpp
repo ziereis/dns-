@@ -8,8 +8,11 @@
 #include <ranges>
 #include "doctest/doctest.h"
 #include "BufferParser.h"
+#include <boost/asio.hpp>
 #include "bitset"
+#include <boost/asio.hpp>
 
+using namespace boost::asio;
 
 TEST_CASE("BufferParser read") {
     SUBCASE("uint8_t")
@@ -127,3 +130,27 @@ TEST_CASE("BufferParser dns_question")
 
     }
 }
+
+TEST_CASE("BufferParser dns_question")
+{
+    SUBCASE("single question")
+    {
+
+    }
+
+}
+
+std::array<uint8_t, DNS_BUF_SIZE> get_buf_from_file(const std::string& filename)
+{
+    char cbuf[DNS_BUF_SIZE];
+    std::array<uint8_t, DNS_BUF_SIZE> buf{};
+    std::ifstream file(filename, std::ios::in | std::ios::binary);
+    file.read(cbuf, DNS_BUF_SIZE);
+
+    for (int i = 0; i < DNS_BUF_SIZE; i++)
+        buf[i] = static_cast<uint8_t>(cbuf[i]);
+
+    return buf;
+
+}
+
