@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.23)
+project(dns_cpp)
+
+set(CMAKE_CXX_STANDARD 23)
+
+find_package(Boost REQUIRED)
+find_package(fmt REQUIRED)
+find_package(doctest REQUIRED)
+
+include(CTest)
+enable_testing()
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+add_compile_options(-Wall -Wextra -Wconversion -pedantic -Wfatal-errors)
+
+add_subdirectory(test EXCLUDE_FROM_ALL)
+add_subdirectory(source)

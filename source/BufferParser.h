@@ -1,0 +1,35 @@
+#pragma once
+#include "Dns.h"
+
+namespace Dns
+{
+    class BufferParser
+    {
+public:
+        DnsQuestion read_question();
+        DnsAnswer read_answer();
+
+        DnsAnswer::DnsRecord read_record(QueryType queryType);
+
+
+        explicit BufferParser(std::span<uint8_t> buf_view);
+
+        template<typename T>
+        requires std::integral<T> || std::is_same_v<T, boost::multiprecision::uint128_t>
+        T read();
+
+        std::string read_name();
+    private:
+
+
+        template<typename T> requires std::integral<T>
+        T get(size_t pos);
+
+        void seek(size_t pos);
+
+
+        std::span<uint8_t> buf_view;
+        size_t position;
+    };
+
+}
