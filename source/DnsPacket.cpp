@@ -3,7 +3,7 @@
 //
 
 #include <ostream>
-#include "Dns.h"
+#include "DnsPacket.h"
 #include "BufferParser.h"
 
 namespace Dns

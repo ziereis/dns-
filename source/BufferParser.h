@@ -1,5 +1,5 @@
 #pragma once
-#include "Dns.h"
+#include "DnsPacket.h"
 
 namespace Dns
 {
