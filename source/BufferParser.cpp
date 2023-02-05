@@ -31,25 +31,33 @@ namespace Dns
 
     DnsAnswer BufferParser::read_answer(){
         auto name = read_name();
-        auto query_type = static_cast<Dns::QueryType>(read<uint16_t>());
-        return {name, query_type, read<uint16_t>(), read<uint32_t>(),
-                read<uint16_t>(), read_record(query_type)};
+        LOG(name.size());
+        auto query_type = get_query_type(read<uint16_t>());
+        auto query_class = read<uint16_t>();
+        auto ttl = read<uint32_t>();
+        auto len = read<uint16_t>();
+        auto record  = read_record(query_type);
+        return {std::move(name), query_type, query_class, ttl,
+                len, std::move(record)};
     }
 
-    DnsAnswer::DnsRecord BufferParser::read_record(QueryType query_type){
+    std::unique_ptr<DnsAnswer::Record> BufferParser::read_record(QueryType query_type){
         switch (query_type) {
             case QueryType::A:
-                return DnsAnswer::A{read<uint32_t>()};
+                return std::make_unique<DnsAnswer::A>(read<uint32_t>());
             case QueryType::AAA:
-                return DnsAnswer::AAA{read<boost::multiprecision::uint128_t>()};
+                return std::make_unique<DnsAnswer::AAA>(read<boost::multiprecision::uint128_t>());
             case QueryType::NS:
-                return DnsAnswer::NS{read_name()};
+                return std::make_unique<DnsAnswer::NS>(read_name());
             case QueryType::CNAME:
-                return DnsAnswer::CNAME{read_name()};
+                return std::make_unique<DnsAnswer::CNAME>(read_name());
             case QueryType::MX:
-                return DnsAnswer::MX{read<uint16_t>(), read_name()};
+                return std::make_unique<DnsAnswer::MX>(read<uint16_t>(), read_name());
+            default:
+                return std::make_unique<DnsAnswer::Unknown>();
         }
     }
+
 
 
     std::string BufferParser::read_name()  {
@@ -88,7 +96,8 @@ namespace Dns
         if (!jump_counter) {
             seek(local_pos+1);
         }
-        name.pop_back();
+        if (name.size() > 0)
+            name.pop_back();
         return name;
     }
 

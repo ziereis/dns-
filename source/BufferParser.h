@@ -10,7 +10,7 @@ public:
         DnsQuestion read_question();
         DnsAnswer read_answer();
 
-        DnsAnswer::DnsRecord read_record(QueryType queryType);
+        std::unique_ptr<DnsAnswer::Record> read_record(QueryType queryType);
 
 
         explicit BufferParser(std::span<uint8_t> buf_view);

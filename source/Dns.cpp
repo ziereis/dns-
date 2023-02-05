@@ -11,7 +11,7 @@ namespace Dns
     DnsPacket::DnsPacket(std::array<uint8_t, DNS_BUF_SIZE>& buf, size_t bytes_read)
     : header_{}, questions{}, answers{}, authorities{}, additionals{}
     {
-        BufferParser parser{std::span(buf)};
+        BufferParser parser{std::span(buf.data(), bytes_read)};
         header_ = parser.read_header();
         LOG(header_);
 
@@ -41,6 +41,23 @@ namespace Dns
 
     }
 
+
+    QueryType  get_query_type(uint16_t query_num) {
+        switch (query_num) {
+            case static_cast<uint16_t>(QueryType::A):
+                return QueryType::A;
+            case static_cast<uint16_t>(QueryType::AAA):
+                return QueryType::AAA;
+            case static_cast<uint16_t>(QueryType::NS):
+                return QueryType::NS;
+            case static_cast<uint16_t>(QueryType::CNAME):
+                return QueryType::CNAME;
+            case static_cast<uint16_t>(QueryType::MX):
+                return QueryType::MX;
+            default:
+                return QueryType::UNKNOWN;
+        }
+    }
     std::ostream& operator<<(std::ostream &os, const DnsHeader &header) {
         os << "DnsHeader{"
            << "\n\tid: " << header.id
@@ -66,12 +83,9 @@ namespace Dns
     }
 
 
-
     std::ostream &operator<<(std::ostream &os, const DnsAnswer &answer) {
-        os << "name: " << answer.name << " query_type: " << static_cast<int>(answer.query_type) << " query_class: " << answer.query_class
-           << " ttl: " << answer.ttl << " len: " << answer.len << " record: ";
-
-        std::visit([](auto& cur){std::cout << "record_type: " << type_name<decltype(cur)>() << std::endl;}, answer.record);
+        os << "name: " << answer.name << " query_type: " << static_cast<uint16_t>(answer.query_type) << " query_class: " << answer.query_class
+           << " ttl: " << answer.ttl << " len: " << answer.len << " record: " << answer.record;
         return os;
     }
 }

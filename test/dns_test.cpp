@@ -93,6 +93,22 @@ TEST_CASE("BufferParser read_name")
         INFO("parsed Value: ", name);
         CHECK((name == ref_name));
     }
+
+    SUBCASE("empty_name")
+    {
+        std::vector<std::string> domain{""};
+        auto buf = generate_buffer_from_label_vec(domain);
+        // has to be 1 bigger to not throw exception at seek
+        buf.push_back(0);
+        Dns::BufferParser parser{std::span(buf)};
+        auto name = parser.read_name();
+        auto ref_name = std::accumulate(domain.begin(), domain.end(), std::string{}, [](auto sum, auto str)
+        { return sum + str + ".";});
+        ref_name.pop_back();
+        INFO("reference Value: ", ref_name);
+        INFO("parsed Value: ", name);
+        CHECK((name == ref_name));
+    }
 }
 
 TEST_CASE("BufferParser dns_question")
@@ -131,11 +147,52 @@ TEST_CASE("BufferParser dns_question")
     }
 }
 
-TEST_CASE("BufferParser dns_question")
+TEST_CASE("BufferParser dns_answer")
 {
-    SUBCASE("single question")
+    SUBCASE("single answer")
     {
+        std::vector<std::string> domain{"www", "coolio","com"};
+        auto buf = generate_buffer_from_label_vec(domain);
+        auto size_of_name = buf.size();
+        //type
+        buf.push_back(0b0000'0000);
+        buf.push_back(0b0000'0001);
+        //class
+        buf.push_back(0b1000'0000);
+        buf.push_back(0b0000'0001);
+        //ttl
+        buf.push_back(0);
+        buf.push_back(0);
+        buf.push_back(0);
+        buf.push_back(1);
+        //len
+        buf.push_back(0);
+        buf.push_back(10);
+        //ipv4
+        buf.push_back(192);
+        buf.push_back(168);
+        buf.push_back(10);
+        buf.push_back(1);
 
+        Dns::BufferParser parser{std::span(buf)};
+        auto answer = parser.read_answer();
+
+        Dns::BufferParser ref_parser{std::span(buf)};
+
+        auto ref_name = ref_parser.read_name();
+        auto ref_type = Dns::get_query_type(ref_parser.read<uint16_t>());
+        auto ref_class = ref_parser.read<uint16_t>();
+        auto ref_ttl = ref_parser.read<uint32_t>();
+        auto ref_len = ref_parser.read<uint16_t>();
+        auto ref_ip4 = ref_parser.read<uint32_t>();
+
+        auto answer_record = dynamic_cast<Dns::DnsAnswer::A*>(answer.record.get());
+        CHECK_EQ(ref_name, answer.name);
+        CHECK_EQ(ref_type, answer.query_type);
+        CHECK_EQ(ref_class, answer.query_class);
+        CHECK_EQ(ref_ttl, answer.ttl);
+        CHECK_EQ(ref_len, answer.len);
+        CHECK_EQ(ref_ip4, answer_record->ip4Addr);
     }
 
 }
