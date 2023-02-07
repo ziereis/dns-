@@ -15,7 +15,7 @@ namespace Dns
         if (buf_view.size() < sizeof(header))
             throw std::invalid_argument{"size of bytes read too small"};
         header.id = read<uint16_t>();
-        std::memcpy(buf_view.data() + sizeof(uint16_t), &header, FLAG_SIZE);
+        std::memcpy(&header, buf_view.data() + sizeof(uint16_t), FLAG_SIZE);
         seek(position + FLAG_SIZE);
 
         header.question_count = read<uint16_t>();
@@ -37,24 +37,24 @@ namespace Dns
         auto ttl = read<uint32_t>();
         auto len = read<uint16_t>();
         auto record  = read_record(query_type);
-        return {std::move(name), query_type, query_class, ttl,
+        return {name, query_type, query_class, ttl,
                 len, std::move(record)};
     }
 
-    std::unique_ptr<DnsAnswer::Record> BufferParser::read_record(QueryType query_type){
+    DnsAnswer::DnsRecord BufferParser::read_record(QueryType query_type){
         switch (query_type) {
             case QueryType::A:
-                return std::make_unique<DnsAnswer::A>(read<uint32_t>());
+                return DnsAnswer::A{read<uint32_t>()};
             case QueryType::AAA:
-                return std::make_unique<DnsAnswer::AAA>(read<boost::multiprecision::uint128_t>());
+                return DnsAnswer::AAA{read<boost::multiprecision::uint128_t>()};
             case QueryType::NS:
-                return std::make_unique<DnsAnswer::NS>(read_name());
+                return DnsAnswer::NS{read_name()};
             case QueryType::CNAME:
-                return std::make_unique<DnsAnswer::CNAME>(read_name());
+                return DnsAnswer::CNAME{read_name()};
             case QueryType::MX:
-                return std::make_unique<DnsAnswer::MX>(read<uint16_t>(), read_name());
+                return DnsAnswer::MX{read<uint16_t>(), read_name()};
             default:
-                return std::make_unique<DnsAnswer::Unknown>();
+                return DnsAnswer::Unknown{};
         }
     }
 
@@ -105,20 +105,13 @@ namespace Dns
         requires std::integral<T> || std::is_same_v<T, boost::multiprecision::uint128_t>
         T BufferParser::read()
         {
-            if (position + sizeof(T) > buf_view.size())
-                throw std::invalid_argument{"trying to get position outside of the Buffer"};
-
-            T result{0};
-            for (size_t i = 0; i < sizeof(T); ++i)
-            {
-                result = result << 8 | static_cast<T>(buf_view[position]);
-                ++position;
-            }
-
+            T result = get<T>(position);
+            position+= sizeof(T);
             return result;
         }
 
-        template<typename T> requires std::integral<T>
+        template<typename T>
+        requires std::integral<T> || std::is_same_v<T, boost::multiprecision::uint128_t>
         T BufferParser::get(size_t pos)
         {
             if (pos + sizeof(T)> buf_view.size())
@@ -141,7 +134,7 @@ namespace Dns
 
         }
 
-         BufferParser::BufferParser(std::span<uint8_t> buf_view)
+         BufferParser::BufferParser(std::span<const uint8_t> buf_view)
                 : buf_view{buf_view}
                 , position{0}
         {}

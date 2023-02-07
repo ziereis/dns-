@@ -3,12 +3,13 @@
 //
 
 #include <ostream>
+#include <utility>
 #include "DnsPacket.h"
 #include "BufferParser.h"
 
 namespace Dns
 {
-    DnsPacket::DnsPacket(std::array<uint8_t, DNS_BUF_SIZE>& buf, size_t bytes_read)
+    DnsPacket::DnsPacket(const std::array<uint8_t, DNS_BUF_SIZE>& buf, size_t bytes_read)
     : header_{}, questions{}, answers{}, authorities{}, additionals{}
     {
         BufferParser parser{std::span(buf.data(), bytes_read)};
@@ -85,7 +86,19 @@ namespace Dns
 
     std::ostream &operator<<(std::ostream &os, const DnsAnswer &answer) {
         os << "name: " << answer.name << " query_type: " << static_cast<uint16_t>(answer.query_type) << " query_class: " << answer.query_class
-           << " ttl: " << answer.ttl << " len: " << answer.len << " record: " << answer.record;
+           << " ttl: " << answer.ttl << " len: " << answer.len << " record: ";
+
+        std::visit(RecordPrintVisitor{}, answer.record);
         return os;
     }
+
+    DnsAnswer::DnsAnswer(std::string name, QueryType queryType, uint16_t query_class,
+                         uint32_t ttl, uint16_t len, DnsRecord record)
+                         : name{std::move(name)}
+                         , query_type{queryType}
+                         , query_class{query_class}
+                         , ttl{ttl}
+                         , len{len}
+                         , record{std::move(record)}
+                         {}
 }

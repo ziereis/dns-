@@ -17,7 +17,7 @@ using namespace boost::asio;
 TEST_CASE("BufferParser read") {
     SUBCASE("uint8_t")
     {
-        std::array<uint8_t,2> buf{0b0101'1101};
+        std::array<uint8_t,1> buf{0b0101'1101};
         uint8_t reference = static_cast<uint8_t>(buf[0]);
         Dns::BufferParser parser{std::span(buf)};
         auto parsed =  parser.read<uint8_t>();
@@ -75,6 +75,31 @@ std::vector<uint8_t> generate_buffer_from_label_vec(std::span<std::string> domai
     buf.push_back(0);
 
     return buf;
+}
+
+TEST_CASE("BufferParser read_header")
+{
+    const std::array<uint8_t, 12> buf
+            {0, 0b0000'1000, 0b1000'0001, 0b1000'0001, 0, 1, 0, 1, 0, 1, 0, 1};
+
+    Dns::BufferParser parser{std::span(buf)};
+    auto header = parser.read_header();
+    auto ref_id = parser.get<uint16_t>(0);
+    INFO("real Value: ", std::bitset<8>(header.response_code));
+    INFO("reference Value: ", std::bitset<8>(8));
+    CHECK_EQ(ref_id, header.id);
+    CHECK_EQ(1, header.query_response);
+    CHECK_EQ(0, header.op_code);
+    CHECK_EQ(0, header.authoritative_answer);
+    CHECK_EQ(0, header.truncated_message);
+    CHECK_EQ(1, header.recursion_desired);
+    CHECK_EQ(1, header.recursion_available);
+    CHECK_EQ(0, header.reserved);
+    CHECK_EQ(8, header.response_code);
+    CHECK_EQ(1, header.question_count);
+    CHECK_EQ(1, header.answer_count);
+    CHECK_EQ(1, header.authority_count);
+    CHECK_EQ(1, header.addtional_count);
 }
 TEST_CASE("BufferParser read_name")
 {
@@ -186,13 +211,12 @@ TEST_CASE("BufferParser dns_answer")
         auto ref_len = ref_parser.read<uint16_t>();
         auto ref_ip4 = ref_parser.read<uint32_t>();
 
-        auto answer_record = dynamic_cast<Dns::DnsAnswer::A*>(answer.record.get());
         CHECK_EQ(ref_name, answer.name);
         CHECK_EQ(ref_type, answer.query_type);
         CHECK_EQ(ref_class, answer.query_class);
         CHECK_EQ(ref_ttl, answer.ttl);
         CHECK_EQ(ref_len, answer.len);
-        CHECK_EQ(ref_ip4, answer_record->ip4Addr);
+        CHECK_EQ(ref_ip4, std::get<Dns::DnsAnswer::A>(answer.record).ip4Addr);
     }
 
 }
