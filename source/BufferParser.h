@@ -3,6 +3,24 @@
 
 namespace Dns
 {
+
+    template<typename T, typename Head, typename... Offsets>
+    void set_bits_at_offsets(T& number, Head head, Offsets... offsets)
+    {
+        number |= (1 << head);
+
+        if constexpr (sizeof...(Offsets) > 0)
+        set_bits_at_offsets(number, offsets...);
+    }
+
+    template<typename T, typename Head, typename... Offsets>
+    T get_bits_at_offsets(T number, Head head, Offsets... offsets)
+    {
+        T mask{0};
+        set_bits_at_offsets(mask, head, offsets...);
+        return number & mask;
+    }
+
     class BufferParser
     {
 public:
@@ -22,6 +40,7 @@ public:
         template<typename T>
         requires std::integral<T> || std::is_same_v<T, boost::multiprecision::uint128_t>
         T get(size_t pos);
+
 
         std::string read_name();
     private:

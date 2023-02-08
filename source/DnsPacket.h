@@ -26,8 +26,22 @@ namespace
 }
 namespace Dns
 {
+    namespace Flags
+    {
+        constexpr uint8_t QUERY_RESPONSE = 0b1000'0000;
+        constexpr uint8_t OP_CODE = 0b0111'1000;
+        constexpr uint8_t AUTHORITATIVE_ANSWER = 0b0000'0100;
+        constexpr uint8_t TRUNCATED_MESSAGE = 0b0000'0010;
+        constexpr uint8_t RECURSION_DESIRED = 0b0000'0001;
+
+        constexpr uint8_t RECURSION_AVAILABLE = 0b1000'0000;
+        constexpr uint8_t RESERVED = 0b0111'0000;
+        constexpr uint8_t RESPONSE_CODE = 0b0000'1111;
+
+    }
     struct __attribute__((packed)) DnsHeader
     {
+/*
         uint8_t query_response :1;
         uint8_t op_code :4;
         uint8_t authoritative_answer :1;
@@ -37,13 +51,28 @@ namespace Dns
         uint8_t recursion_available :1;
         uint8_t reserved :3;
         uint8_t response_code :4;
+*/
 
         uint16_t id;
+
+        uint8_t flags1;
+        uint8_t flags2;
 
         uint16_t question_count;
         uint16_t answer_count;
         uint16_t authority_count;
         uint16_t addtional_count;
+
+        uint8_t get_query_response();
+        uint8_t get_op_code();
+        uint8_t get_authoritative_answer();
+        uint8_t get_truncated_message();
+        uint8_t get_recursion_desired();
+        uint8_t get_recursion_available();
+        uint8_t get_reserved();
+        uint8_t get_response_code();
+
+
 
         friend std::ostream &operator<<(std::ostream &os, const DnsHeader &header);
     };

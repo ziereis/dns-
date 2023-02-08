@@ -62,6 +62,7 @@ namespace Dns
     std::ostream& operator<<(std::ostream &os, const DnsHeader &header) {
         os << "DnsHeader{"
            << "\n\tid: " << header.id
+/*
            << "\n\tquery_response: " << std::to_string(header.query_response)
            << "\n\top_code: " << std::to_string(header.op_code)
            << "\n\tauthoritative_answer: " << std::to_string(header.authoritative_answer)
@@ -70,12 +71,49 @@ namespace Dns
            << "\n\trecursion_available: " << std::to_string(header.recursion_available)
            << "\n\treserved: " << std::to_string(header.reserved)
            << "\n\tresponse_code: " << std::to_string(header.response_code)
+*/
+            << "\n\t flags1 =  :" << std::bitset<8>(header.flags1)
+            << "\n\t flags2 =  :" << std::bitset<8>(header.flags2)
            << "\n\tquestion_count: " << header.question_count
            << "\n\tanswer_count: " << header.answer_count
            << "\n\tauthority_count: " << header.authority_count
            << "\n\taddtional_count: " << header.addtional_count << "}";
         return os;
     }
+
+
+    uint8_t DnsHeader::get_query_response() {
+        return 0;
+    }
+
+    uint8_t DnsHeader::get_op_code() {
+        return 0;
+    }
+
+    uint8_t DnsHeader::get_authoritative_answer() {
+        return 0;
+    }
+
+    uint8_t DnsHeader::get_truncated_message() {
+        return 0;
+    }
+
+    uint8_t DnsHeader::get_recursion_desired() {
+        return 0;
+    }
+
+    uint8_t DnsHeader::get_recursion_available() {
+        return 0;
+    }
+
+    u_int8_t DnsHeader::get_reserved() {
+        return 0;
+    }
+
+    u_int8_t DnsHeader::get_response_code() {
+        return 0;
+    }
+
     std::ostream& operator<<(std::ostream &os, const DnsQuestion &question) {
         os << "name: " << question.name << " query_type: "
         << question.query_type << " query_class: "

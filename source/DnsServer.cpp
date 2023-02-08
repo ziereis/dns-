@@ -72,7 +72,7 @@ namespace Dns
 
     void DnsServer::handle_server_response(const boost::system::error_code &ec, size_t bytes_read,
                                            std::array<uint8_t, DNS_BUF_SIZE> buf) {
-        Dns::DnsPacket packet{buf, bytes_read};
+        //Dns::DnsPacket packet{buf, bytes_read};
 
 //       if (!packet.answers.empty()) {
             client_socket.async_send_to(buffer(buf), client, [](const auto &ec, std::size_t bytes_read) {

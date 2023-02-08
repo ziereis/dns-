@@ -15,8 +15,8 @@ namespace Dns
         if (buf_view.size() < sizeof(header))
             throw std::invalid_argument{"size of bytes read too small"};
         header.id = read<uint16_t>();
-        std::memcpy(&header, buf_view.data() + sizeof(uint16_t), FLAG_SIZE);
-        seek(position + FLAG_SIZE);
+        header.flags1 = read<uint8_t>();
+        header.flags2 = read<uint8_t>();
 
         header.question_count = read<uint16_t>();
         header.answer_count = read<uint16_t>();
