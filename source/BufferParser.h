@@ -5,8 +5,12 @@ namespace Dns
 {
 
     template<typename T, typename Head, typename... Offsets>
+    requires std::integral<T> && std::integral<Head>
     void set_bits_at_offsets(T& number, Head head, Offsets... offsets)
     {
+        if (head >= sizeof(T) * 8)
+            throw std::invalid_argument{"offset is out of bounds"};
+
         number |= (1 << head);
 
         if constexpr (sizeof...(Offsets) > 0)
@@ -14,6 +18,7 @@ namespace Dns
     }
 
     template<typename T, typename Head, typename... Offsets>
+    requires std::integral<T> && std::integral<Head>
     T get_bits_at_offsets(T number, Head head, Offsets... offsets)
     {
         T mask{0};

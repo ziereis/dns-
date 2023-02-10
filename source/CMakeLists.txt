@@ -8,4 +8,4 @@ target_include_directories(${LIBRARY_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(${LIBRARY_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
 add_executable(${EXECUTABLE_NAME} main.cpp DnsPacket.h)
-target_link_libraries(${EXECUTABLE_NAME} ${LIBRARY_NAME})
+target_link_libraries(${EXECUTABLE_NAME} ${LIBRARY_NAME} fmt::fmt)

@@ -88,6 +88,13 @@ TEST_CASE("bit getters and setter")
 
     }
 
+    SUBCASE("setters should throw")
+    {
+        uint8_t num = 0;
+
+        CHECK_THROWS(Dns::set_bits_at_offsets(num, 8));
+    }
+
     SUBCASE("getter")
     {
         uint8_t num = 0b1010'0100;
@@ -97,8 +104,14 @@ TEST_CASE("bit getters and setter")
         CHECK_EQ(0b1000'0100, flags);
 
     }
+
+    SUBCASE("getter should throw")
+    {
+        uint8_t num = 0;
+
+        CHECK_THROWS(Dns::get_bits_at_offsets(num, 8));
+    }
 }
-/*
 
 TEST_CASE("BufferParser read_header")
 {
@@ -108,23 +121,22 @@ TEST_CASE("BufferParser read_header")
     Dns::BufferParser parser{std::span(buf)};
     auto header = parser.read_header();
     auto ref_id = parser.get<uint16_t>(0);
-    INFO("real Value: ", std::bitset<8>(header.response_code));
     INFO("reference Value: ", std::bitset<8>(8));
+    INFO("real Value: ", header);
     CHECK_EQ(ref_id, header.id);
-    CHECK_EQ(1, header.query_response);
-    CHECK_EQ(0, header.op_code);
-    CHECK_EQ(0, header.authoritative_answer);
-    CHECK_EQ(0, header.truncated_message);
-    CHECK_EQ(1, header.recursion_desired);
-    CHECK_EQ(1, header.recursion_available);
-    CHECK_EQ(0, header.reserved);
-    CHECK_EQ(8, header.response_code);
+    CHECK_EQ(1, header.get_query_response());
+    CHECK_EQ(0, header.get_op_code());
+    CHECK_EQ(0, header.get_authoritative_answer());
+    CHECK_EQ(0, header.get_truncated_message());
+    CHECK_EQ(1, header.get_recursion_desired());
+    CHECK_EQ(1, header.get_recursion_available());
+    CHECK_EQ(0, header.get_reserved());
+    CHECK_EQ(8, header.get_response_code());
     CHECK_EQ(1, header.question_count);
     CHECK_EQ(1, header.answer_count);
     CHECK_EQ(1, header.authority_count);
     CHECK_EQ(1, header.addtional_count);
 }
-*/
 TEST_CASE("BufferParser read_name")
 {
     SUBCASE("single_name")

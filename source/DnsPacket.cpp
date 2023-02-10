@@ -59,19 +59,18 @@ namespace Dns
                 return QueryType::UNKNOWN;
         }
     }
+
     std::ostream& operator<<(std::ostream &os, const DnsHeader &header) {
         os << "DnsHeader{"
            << "\n\tid: " << header.id
-/*
-           << "\n\tquery_response: " << std::to_string(header.query_response)
-           << "\n\top_code: " << std::to_string(header.op_code)
-           << "\n\tauthoritative_answer: " << std::to_string(header.authoritative_answer)
-           << "\n\ttruncated_message: " << std::to_string(header.truncated_message)
-           << "\n\trecursion_desired: " << std::to_string(header.recursion_desired)
-           << "\n\trecursion_available: " << std::to_string(header.recursion_available)
-           << "\n\treserved: " << std::to_string(header.reserved)
-           << "\n\tresponse_code: " << std::to_string(header.response_code)
-*/
+           << "\n\tquery_response: " << header.get_query_response()
+           << "\n\top_code: " << header.get_op_code()
+           << "\n\tauthoritative_answer: " << header.get_authoritative_answer()
+           << "\n\ttruncated_message: " << header.get_truncated_message()
+           << "\n\trecursion_desired: " << header.get_recursion_desired()
+           << "\n\trecursion_available: " << header.get_recursion_available()
+           << "\n\treserved: " << header.get_reserved()
+           << "\n\tresponse_code: " << header.get_response_code()
             << "\n\t flags1 =  :" << std::bitset<8>(header.flags1)
             << "\n\t flags2 =  :" << std::bitset<8>(header.flags2)
            << "\n\tquestion_count: " << header.question_count
@@ -82,36 +81,36 @@ namespace Dns
     }
 
 
-    uint8_t DnsHeader::get_query_response() {
-        return 0;
+    bool DnsHeader::get_query_response() const {
+        return (flags1 & Flags::QUERY_RESPONSE) >> 7;
     }
 
-    uint8_t DnsHeader::get_op_code() {
-        return 0;
+    uint8_t DnsHeader::get_op_code() const {
+        return (flags1 & Flags::OP_CODE) >> 3;
     }
 
-    uint8_t DnsHeader::get_authoritative_answer() {
-        return 0;
+    bool DnsHeader::get_authoritative_answer() const {
+        return (flags1 & Flags::AUTHORITATIVE_ANSWER) >> 2;
     }
 
-    uint8_t DnsHeader::get_truncated_message() {
-        return 0;
+    bool DnsHeader::get_truncated_message() const {
+        return (flags1 & Flags::TRUNCATED_MESSAGE) >> 1;
     }
 
-    uint8_t DnsHeader::get_recursion_desired() {
-        return 0;
+    bool DnsHeader::get_recursion_desired() const {
+        return (flags1 & Flags::RECURSION_DESIRED) >> 0;
     }
 
-    uint8_t DnsHeader::get_recursion_available() {
-        return 0;
+    bool DnsHeader::get_recursion_available() const {
+        return (flags2 & Flags::RECURSION_AVAILABLE) >> 7;
     }
 
-    u_int8_t DnsHeader::get_reserved() {
-        return 0;
+    u_int8_t DnsHeader::get_reserved() const {
+        return (flags2 & Flags::RESERVED) >> 4;
     }
 
-    u_int8_t DnsHeader::get_response_code() {
-        return 0;
+    u_int8_t DnsHeader::get_response_code() const {
+        return flags2 & Flags::RESPONSE_CODE;
     }
 
     std::ostream& operator<<(std::ostream &os, const DnsQuestion &question) {
