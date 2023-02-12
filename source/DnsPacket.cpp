@@ -17,29 +17,41 @@ namespace Dns
         LOG(header_);
 
         for(size_t i = 0; i < header_.question_count; i++)
+        {
             questions.emplace_back(parser.read_question());
+            LOG(questions.back());
+        }
 
         for(size_t i = 0; i < header_.answer_count; i++)
+        {
             answers.emplace_back(parser.read_answer());
+            LOG(answers.back());
+        }
 
         for(size_t i = 0; i < header_.authority_count; i++)
+        {
             authorities.emplace_back(parser.read_answer());
+            LOG(authorities.back());
+        }
 
         for(size_t i = 0; i < header_.addtional_count; i++)
+        {
             additionals.emplace_back(parser.read_answer());
+            LOG(additionals.back());
+        }
 
-#if ENABLE_DEBUG_LOG
-        for(auto& q : questions)
-            std::cout << q << std::endl;
-        for(auto& q : answers)
-            std::cout << q << std::endl;
-        for(auto& q : authorities)
-            std::cout << q << std::endl;
-        for(auto& q : additionals)
-            std::cout << q << std::endl;
-#endif
+    }
 
+    DnsPacket DnsPacket::generate_default() {
+        DnsPacket packet{};
+        packet.header_ = DnsHeader::generate(1, false, true);
+        packet.add_question("google.com", 1);
+        return packet;
+    }
 
+    void DnsPacket::add_question(std::string name, uint16_t type) {
+        ++header_.question_count;
+        questions.emplace_back(DnsQuestion{std::move(name), type, 0});
     }
 
 
@@ -64,13 +76,13 @@ namespace Dns
         os << "DnsHeader{"
            << "\n\tid: " << header.id
            << "\n\tquery_response: " << header.get_query_response()
-           << "\n\top_code: " << header.get_op_code()
+           << "\n\top_code: " << std::to_string(header.get_op_code())
            << "\n\tauthoritative_answer: " << header.get_authoritative_answer()
            << "\n\ttruncated_message: " << header.get_truncated_message()
            << "\n\trecursion_desired: " << header.get_recursion_desired()
            << "\n\trecursion_available: " << header.get_recursion_available()
-           << "\n\treserved: " << header.get_reserved()
-           << "\n\tresponse_code: " << header.get_response_code()
+           << "\n\treserved: " << std::to_string(header.get_reserved())
+           << "\n\tresponse_code: " << std::to_string(header.get_response_code())
             << "\n\t flags1 =  :" << std::bitset<8>(header.flags1)
             << "\n\t flags2 =  :" << std::bitset<8>(header.flags2)
            << "\n\tquestion_count: " << header.question_count
@@ -112,6 +124,42 @@ namespace Dns
     u_int8_t DnsHeader::get_response_code() const {
         return flags2 & Flags::RESPONSE_CODE;
     }
+
+    void DnsHeader::set_recursion_desired(bool recursion_desired) {
+        if (recursion_desired)
+            flags1 |= Flags::RECURSION_DESIRED;
+        else
+            flags1 &= ~Flags::RECURSION_DESIRED;
+    }
+
+    void DnsHeader::set_recursion_available(bool recursion_available) {
+        if (recursion_available)
+            flags2 |= Flags::RECURSION_AVAILABLE;
+        else
+            flags2 &= ~Flags::RECURSION_AVAILABLE;
+
+    }
+
+    void DnsHeader::set_query_response(bool response) {
+        if (response)
+            flags2 |= Flags::QUERY_RESPONSE;
+        else
+            flags2 &= ~Flags::QUERY_RESPONSE;
+    }
+
+    DnsHeader DnsHeader::generate(uint16_t id, bool response, bool recursion) {
+        DnsHeader header;
+        header.id = id;
+        header.flags1 = 0;
+        header.flags2 = 0;
+        header.set_query_response(response);
+        header.set_recursion_desired(recursion);
+        header.question_count = 0;
+        header.answer_count = 0;
+        header.addtional_count = 0;
+        return header;
+    }
+
 
     std::ostream& operator<<(std::ostream &os, const DnsQuestion &question) {
         os << "name: " << question.name << " query_type: "

@@ -3,6 +3,7 @@
 //
 
 #include "DnsServer.h"
+#include "fmt/core.h"
 namespace Dns
 {
     DnsServer::DnsServer()
@@ -18,13 +19,15 @@ namespace Dns
         client_socket.open(ip::udp::v4(), ec);
         client_socket.bind(client_ep, ec);
 
-        ip::udp::endpoint server_ep(ip::address_v4::any(), 52346);
+        ip::udp::endpoint server_ep(ip::address_v4::any(), 5234);
         lookup_socket.open(ip::udp::v4(), ec);
         lookup_socket.bind(client_ep, ec);
 
         std::array<uint8_t, DNS_BUF_SIZE> buf{};
-        client_socket.async_receive_from(buffer(buf), client, [&buf, this] (const auto& ec, std::size_t bytes_read){
-            handle_incoming_request(ec, bytes_read, buf);
+
+        ip::udp::endpoint client;
+        client_socket.async_receive_from(buffer(buf), client, [&buf, this, &client] (const auto& ec, std::size_t bytes_read){
+            handle_incoming_request(ec, bytes_read, buf, client);
         });
 
         io.run();
@@ -32,38 +35,40 @@ namespace Dns
 
 
 
-    void DnsServer::lookup(std::array<uint8_t, DNS_BUF_SIZE> buf)
+    void DnsServer::lookup(std::array<uint8_t, DNS_BUF_SIZE> buf, ip::udp::endpoint client)
     {
-        ip::udp::endpoint name_server(ip::address::from_string("198.41.0.4"), 53);
+        ip::udp::endpoint name_server(ip::address::from_string("192.33.4.12"), 53);
 
-        lookup_socket.async_send_to(buffer(buf), name_server, [this](const auto&ec, size_t bytes_sent) {
-            handle_lookup(ec, bytes_sent);});
-
-
+        LOG("performing lookup for client: " + client.address().to_string() + "\n");
+        LOG("performing lookup on server: " + name_server.address().to_string() + "\n");
+        lookup_socket.async_send_to(buffer(buf), name_server, [this, &client](const auto&ec, size_t bytes_sent) {
+            handle_lookup(ec, bytes_sent, client);});
     }
 
     void DnsServer::handle_incoming_request(const boost::system::error_code& ec,
                                  size_t bytes_read,
-                                 std::array<uint8_t, DNS_BUF_SIZE> buf)
+                                 std::array<uint8_t, DNS_BUF_SIZE> buf, ip::udp::endpoint client)
     {
         if(ec) return;
+        LOG("received from client: " + client.address().to_string() + "\n");
 
-        Dns::DnsPacket packet{buf, bytes_read};
 
-        lookup(buf);
+        lookup(buf, client);
 
-        client_socket.async_receive_from(buffer(buf), client, [&buf, this](const auto& ec, std::size_t bytes_read){
-            handle_incoming_request(ec, bytes_read, buf);
+        client_socket.async_receive_from(buffer(buf), client, [&buf, this, &client](const auto& ec, std::size_t bytes_read){
+            handle_incoming_request(ec, bytes_read, buf, client);
         });
 
     }
 
-    void DnsServer::handle_lookup(const boost::system::error_code &ec, size_t bytes_read) {
+    void DnsServer::handle_lookup(const boost::system::error_code &ec, size_t bytes_read,
+                                  ip::udp::endpoint client) {
 
         std::array<uint8_t, DNS_BUF_SIZE> buf{};
 
-        lookup_socket.async_receive(buffer(buf), [&buf, this] (const auto& ec, std::size_t bytes_read){
-            handle_server_response(ec, bytes_read, buf);
+        LOG("receiving from dns server for client: " + client.address().to_string() + "\n");
+        lookup_socket.async_receive(buffer(buf), [&buf, this, &client] (const auto& ec, std::size_t bytes_read){
+            handle_server_response(ec, bytes_read, buf, client);
         });
 
 
@@ -71,8 +76,11 @@ namespace Dns
 
 
     void DnsServer::handle_server_response(const boost::system::error_code &ec, size_t bytes_read,
-                                           std::array<uint8_t, DNS_BUF_SIZE> buf) {
+                                           std::array<uint8_t, DNS_BUF_SIZE> buf, ip::udp::endpoint client) {
+
+        LOG("handling answer from dns server for client: " + client.address().to_string() + "\n");
         Dns::DnsPacket packet{buf, bytes_read};
+        LOG("finished parsing packet\n")
 
         if (!packet.answers.empty()) {
             client_socket.async_send_to(buffer(buf), client, [](const auto &ec, std::size_t bytes_read) {

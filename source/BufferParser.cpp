@@ -5,6 +5,7 @@
 namespace
 {
     constexpr uint8_t JUMP_MASK = 0b1100'0000;
+    constexpr uint16_t JUMP_MASK_16 = 0b0011'1111'1111'1111;
     constexpr uint8_t MAX_JUMPS = 5;
     constexpr uint8_t FLAG_SIZE = 2;
 }
@@ -30,13 +31,19 @@ namespace Dns
     }
 
     DnsAnswer BufferParser::read_answer(){
+        LOG(position);
         auto name = read_name();
-        LOG(name.size());
-        auto query_type = get_query_type(read<uint16_t>());
-        auto query_class = read<uint16_t>();
-        auto ttl = read<uint32_t>();
-        auto len = read<uint16_t>();
+        LOG(position);
+        auto query_type = get_query_type(read_u16());
+        LOG(position);
+        auto query_class = read_u16();
+        LOG(position);
+        auto ttl = read_u32();
+        LOG(position);
+        auto len = read_u16();
+        LOG(position);
         auto record  = read_record(query_type);
+        LOG(position);
         return {name, query_type, query_class, ttl,
                 len, std::move(record)};
     }
@@ -44,16 +51,22 @@ namespace Dns
     DnsAnswer::DnsRecord BufferParser::read_record(QueryType query_type){
         switch (query_type) {
             case QueryType::A:
-                return DnsAnswer::A{read<uint32_t>()};
+                LOG("A");
+                return DnsAnswer::A{read_u32()};
             case QueryType::AAA:
-                return DnsAnswer::AAA{read<boost::multiprecision::uint128_t>()};
+                LOG("AAA");
+                return DnsAnswer::AAA{read_ipv6()};
             case QueryType::NS:
+                LOG("NS");
                 return DnsAnswer::NS{read_name()};
             case QueryType::CNAME:
+                LOG("CNAME");
                 return DnsAnswer::CNAME{read_name()};
             case QueryType::MX:
+                LOG("MX");
                 return DnsAnswer::MX{read<uint16_t>(), read_name()};
             default:
+                LOG("UNKNOWN");
                 return DnsAnswer::Unknown{};
         }
     }
@@ -63,46 +76,54 @@ namespace Dns
     std::string BufferParser::read_name()  {
         std::string name;
         auto local_pos = position;
+
         int jump_counter{0};
         while(true) {
             if (jump_counter > MAX_JUMPS)
                 throw std::invalid_argument{"max amount of jumps reached"};
 
             auto len = get<uint8_t>(local_pos);
-            if (!len) break;
 
             if ((JUMP_MASK & len) == JUMP_MASK) {
-                LOG("jumped");
                 if (!jump_counter)
-                    seek(position + 2);
+                    seek(local_pos + 2);
+
+                auto offset = get<uint16_t>(local_pos) & ~(static_cast<uint16_t>(JUMP_MASK) << 8);
+                LOG(std::bitset<8>(len));
+                LOG(std::bitset<16>(offset));
+                local_pos = static_cast<size_t>(offset);
 
                 jump_counter++;
-                auto offset = get<uint16_t>(local_pos) & ~(static_cast<uint16_t>(JUMP_MASK) << 8);
-
-                local_pos += static_cast<size_t>(offset);
                 continue;
             }
             else
             {
+                ++local_pos;
+
+                if (!len) break;
+
+
                 auto end = local_pos + len;
-                for (++local_pos; local_pos <= end; ++local_pos)
+                for (std::size_t i = local_pos; i < end; ++i)
                 {
-                    name += static_cast<char>(get<uint8_t>(local_pos));
+                    name += static_cast<char>(get<uint8_t>(i));
                 }
                 name += ".";
+
+                local_pos += len;
             }
 
         }
         if (!jump_counter) {
-            seek(local_pos+1);
+            seek(local_pos);
         }
-        if (name.size() > 0)
+        if (!name.empty())
             name.pop_back();
         return name;
     }
 
         template<typename T>
-        requires std::integral<T> || std::is_same_v<T, boost::multiprecision::uint128_t>
+        requires std::integral<T>
         T BufferParser::read()
         {
             T result = get<T>(position);
@@ -110,28 +131,41 @@ namespace Dns
             return result;
         }
 
+
         template<typename T>
-        requires std::integral<T> || std::is_same_v<T, boost::multiprecision::uint128_t>
-        T BufferParser::get(size_t pos)
+        requires std::integral<T>
+        T BufferParser::get(size_t pos) const
         {
             if (pos + sizeof(T)> buf_view.size())
                 throw std::invalid_argument{"trying to get position outside of the Buffer"};
 
             T result{0};
-            for (size_t i = 0; i < sizeof(T); ++i)
+            for (int i = sizeof(T) -1; i >= 0; i--)
             {
-                result = result << 8 | static_cast<T>(buf_view[pos]);
+                result |= (static_cast<T>(buf_view[pos]) << (8*i));
                 ++pos;
+            }
+            return result;
+        }
+
+        ip::address_v6::bytes_type BufferParser::read_ipv6()
+        {
+            ip::address_v6::bytes_type result{};
+
+            if (position + result.size() > buf_view.size())
+                throw std::invalid_argument{"trying to get position outside of the Buffer"};
+
+            for (unsigned char& i : result)
+            {
+                i = buf_view[position];
+                ++position;
             }
             return result;
         }
 
         void BufferParser::seek(size_t pos)
         {
-            if (pos >= buf_view.size())
-                throw std::invalid_argument{"trying to get position outside of the Buffer"};
             position = pos;
-
         }
 
          BufferParser::BufferParser(std::span<const uint8_t> buf_view)
@@ -139,8 +173,72 @@ namespace Dns
                 , position{0}
         {}
 
+    uint8_t BufferParser::read_u8() {
+        if (position >= buf_view.size())
+            throw std::invalid_argument("read out of bounds");
+        auto result = buf_view[position];
+        position++;
+        return result;
+
+    }
+
+    uint16_t BufferParser::read_u16() {
+        return (static_cast<uint16_t>(read_u8()) << 8)
+        | static_cast<uint16_t>(read_u8()) ;
+    }
+
+    uint32_t BufferParser::read_u32() {
+        return (static_cast<uint32_t>(read_u8()) << 24)
+        | (static_cast<uint32_t>(read_u8()) << 16)
+        | (static_cast<uint32_t>(read_u8()) << 8)
+        | static_cast<uint32_t>(read_u8()) ;
+    }
+
     // for tests
     template uint8_t BufferParser::read<uint8_t>();
     template uint16_t BufferParser::read<uint16_t>();
     template uint32_t BufferParser::read<uint32_t>();
+
+    template<typename T>
+    requires std::integral<T>
+    void BufferBuilder::write(T bytes) {
+        if (position + sizeof(T) > buf.size())
+            throw std::invalid_argument{"trying to write position outside of the Buffer"};
+
+        for (int i = sizeof(T) -1; i >= 0; i--)
+        {
+            buf[position] = static_cast<uint8_t>(bytes >> (8*i));
+            ++position;
+        }
+    }
+    void BufferBuilder::write_header(const DnsHeader &header) {
+
+    }
+
+    void BufferBuilder::write_question(const DnsQuestion &question) {
+
+    }
+
+    void BufferBuilder::buildPacket() {
+        std::array<uint8_t, DNS_BUF_SIZE> buf{};
+        write_header(packet.header_);
+        for (auto & q : packet.questions)
+            write_question(q);
+    }
+
+    std::array<uint8_t, DNS_BUF_SIZE> BufferBuilder::get_buf() {
+        return std::array<uint8_t, DNS_BUF_SIZE>();
+    }
+
+    std::array<uint8_t, DNS_BUF_SIZE> BufferBuilder::build_and_get_buf() {
+        return std::array<uint8_t, DNS_BUF_SIZE>();
+    }
+
+    BufferBuilder::BufferBuilder(const DnsPacket &packet)
+    : position{0}
+    , packet{packet}
+    , buf{}
+    {}
+
+
 }

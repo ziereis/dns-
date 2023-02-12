@@ -39,12 +39,19 @@ public:
         explicit BufferParser(std::span<const uint8_t> buf_view);
 
         template<typename T>
-        requires std::integral<T> || std::is_same_v<T, boost::multiprecision::uint128_t>
+        requires std::integral<T>
         T read();
 
         template<typename T>
-        requires std::integral<T> || std::is_same_v<T, boost::multiprecision::uint128_t>
-        T get(size_t pos);
+        requires std::integral<T>
+        T get(size_t pos) const;
+
+        ip::address_v6::bytes_type read_ipv6();
+
+        uint8_t read_u8();
+        uint16_t read_u16();
+        uint32_t read_u32();
+
 
 
         std::string read_name();
@@ -56,6 +63,27 @@ public:
 
         std::span<const uint8_t> buf_view;
         size_t position;
+    };
+
+    class BufferBuilder
+    {
+    public:
+        void write_header(const DnsHeader& header);
+        void write_question(const DnsQuestion& question);
+
+        template<typename T>
+        requires std::integral<T>
+        void write(T bytes);
+
+        explicit BufferBuilder(const DnsPacket& packet);
+
+        void buildPacket();
+        std::array<uint8_t, DNS_BUF_SIZE> get_buf();
+        std::array<uint8_t, DNS_BUF_SIZE> build_and_get_buf();
+    private:
+        std::size_t position;
+        const DnsPacket& packet;
+        std::array<uint8_t, DNS_BUF_SIZE> buf;
     };
 
 }

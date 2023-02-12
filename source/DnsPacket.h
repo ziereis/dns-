@@ -3,12 +3,14 @@
 
 #include <boost/endian/buffers.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
+#include <boost/asio.hpp>
 #include <string>
 #include <array>
 #include <span>
 #include <iostream>
 #include <utility>
 #include <variant>
+using namespace boost::asio;
 
 #define ENABLE_DEBUG_LOG 1
 
@@ -39,6 +41,16 @@ namespace Dns
         constexpr uint8_t RESPONSE_CODE = 0b0000'1111;
 
     }
+
+    enum class QueryType{
+        A = 1,
+        NS = 2,
+        CNAME = 5,
+        MX = 15,
+        AAA = 28,
+        UNKNOWN = 678
+    };
+
     struct __attribute__((packed)) DnsHeader
     {
         uint16_t id;
@@ -61,6 +73,13 @@ namespace Dns
         [[nodiscard]] uint8_t get_reserved() const;
         [[nodiscard]] uint8_t get_response_code() const;
 
+        void set_recursion_desired(bool recursion_desired);
+        void set_recursion_available(bool recursion_available);
+        void set_query_response(bool response);
+
+        static DnsHeader generate(uint16_t, bool response, bool recursion);
+
+
         friend std::ostream &operator<<(std::ostream &os, const DnsHeader &header);
     };
 
@@ -73,24 +92,24 @@ namespace Dns
         friend std::ostream &operator<<(std::ostream &os, const DnsQuestion &question);
     };
 
-    enum class QueryType{
-        A = 1,
-        NS = 2,
-        CNAME = 5,
-        MX = 15,
-        AAA = 28,
-        UNKNOWN = 678
-    };
 
     Dns::QueryType  get_query_type(uint16_t query_num);
 
     struct DnsAnswer
     {
-        struct A { uint32_t ip4Addr;};
+        struct A {
+            explicit A(ip::address_v4::uint_type ip4Addr)
+            : ip4Addr{ip4Addr} {}
+            ip::address_v4 ip4Addr;
+        };
         struct NS { std::string name;};
         struct CNAME { std::string name;};
         struct MX { uint16_t priority; std::string name;};
-        struct AAA {  boost::multiprecision::uint128_t ip6Addr;};
+        struct AAA {
+            explicit AAA(ip::address_v6::bytes_type ipv6Addr)
+            : ip6Addr{ipv6Addr} {}
+            ip::address_v6 ip6Addr;
+        };
         struct Unknown {};
 
         using DnsRecord = std::variant<A, NS, CNAME, MX, AAA,Unknown>;
@@ -111,11 +130,11 @@ namespace Dns
     struct RecordPrintVisitor {
         void operator()(const DnsAnswer::A& record) const
         {
-            std::cout << record.ip4Addr << std::endl;
+            std::cout << record.ip4Addr.to_string() << std::endl;
         }
         void operator()(const DnsAnswer::AAA& record) const
         {
-            std::cout << record.ip6Addr << std::endl;
+            std::cout << record.ip6Addr.to_string() << std::endl;
         }
         void operator()(const DnsAnswer::Unknown& record) const
         {
@@ -132,12 +151,16 @@ namespace Dns
     public:
 
         DnsPacket(const std::array<uint8_t, DNS_BUF_SIZE>& buf, size_t bytes_read);
-
+        DnsPacket() = default;
         Dns::DnsHeader header_;
         std::vector<DnsQuestion> questions;
         std::vector<DnsAnswer> answers;
         std::vector<DnsAnswer> authorities;
         std::vector<DnsAnswer> additionals;
+
+        static DnsPacket generate_default();
+
+        void add_question(std::string name, uint16_t type);
 
 
     };

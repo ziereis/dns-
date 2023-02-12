@@ -63,6 +63,25 @@ TEST_CASE("BufferParser read") {
     }
 }
 
+TEST_CASE("packet building")
+{
+    auto packet = Dns::DnsPacket::generate_default();
+
+    CHECK_EQ(1, packet.header_.question_count);
+    CHECK_EQ("google.com", packet.questions[0].name);
+
+}
+
+TEST_CASE("buffer generation from packet")
+{
+    auto packet = Dns::DnsPacket::generate_default();
+    Dns::BufferBuilder builder{packet};
+
+}
+
+
+
+
 std::vector<uint8_t> generate_buffer_from_label_vec(std::span<std::string> domain)
 {
     std::vector<uint8_t> buf;
@@ -143,8 +162,6 @@ TEST_CASE("BufferParser read_name")
     {
         std::vector<std::string> domain{"www", "coolio","com"};
         auto buf = generate_buffer_from_label_vec(domain);
-        // has to be 1 bigger to not throw exception at seek
-        buf.push_back(0);
         Dns::BufferParser parser{std::span(buf)};
         auto name = parser.read_name();
         auto ref_name = std::accumulate(domain.begin(), domain.end(), std::string{}, [](auto sum, auto str)
@@ -170,6 +187,35 @@ TEST_CASE("BufferParser read_name")
         INFO("parsed Value: ", name);
         CHECK((name == ref_name));
     }
+    SUBCASE("read_name with jumps")
+    {
+        std::vector<uint8_t> buf;
+        buf.push_back(5);
+        buf.push_back('a');
+        buf.push_back('b');
+        buf.push_back('c');
+        buf.push_back('d');
+        buf.push_back('e');
+        buf.push_back(3);
+        buf.push_back('x');
+        buf.push_back('y');
+        buf.push_back('z');
+        buf.push_back(0);
+        buf.push_back(0b1100'0000);
+        buf.push_back(0b000'0000);
+        buf.push_back(0b1100'0000);
+        buf.push_back(11);
+
+        Dns::BufferParser parser{std::span(buf)};
+        auto name1 = parser.read_name();
+        auto name2 = parser.read_name();
+        auto name3 = parser.read_name();
+
+        CHECK_EQ("abcde.xyz", name1);
+        CHECK_EQ("abcde.xyz", name2);
+        CHECK_EQ("abcde.xyz", name3);
+    }
+
 }
 
 TEST_CASE("BufferParser dns_question")
@@ -197,13 +243,13 @@ TEST_CASE("BufferParser dns_question")
         uint16_t ref_class = static_cast<uint16_t>(buf[size_of_name + 2]) << 8 | static_cast<uint16_t>(buf[size_of_name + 3]);
         INFO("reference name: ", ref_name);
         INFO("parsed name: ", question.name);
-        INFO("reference type: ", ref_type);
-        INFO("parsed type: ", question.query_type);
+        INFO("reference type: ", std::bitset<16>(ref_type));
+        INFO("parsed type: ", std::bitset<16>(question.query_type));
         INFO("reference class: ", ref_class);
         INFO("parsed class: ", question.query_class);
-        CHECK((question.name == ref_name));
-        CHECK((question.query_type == ref_type));
-        CHECK((question.query_class == ref_class));
+        CHECK_EQ(question.name, ref_name);
+        CHECK_EQ(question.query_type,  ref_type);
+        CHECK_EQ(question.query_class, ref_class);
 
     }
 }
@@ -252,7 +298,8 @@ TEST_CASE("BufferParser dns_answer")
         CHECK_EQ(ref_class, answer.query_class);
         CHECK_EQ(ref_ttl, answer.ttl);
         CHECK_EQ(ref_len, answer.len);
-        CHECK_EQ(ref_ip4, std::get<Dns::DnsAnswer::A>(answer.record).ip4Addr);
+        CHECK_EQ(ip::address_v4(ip::address_v4::uint_type(ref_ip4)).to_string(),
+                 std::get<Dns::DnsAnswer::A>(answer.record).ip4Addr.to_string());
     }
 
 }
