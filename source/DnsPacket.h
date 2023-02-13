@@ -158,11 +158,11 @@ namespace Dns
         std::vector<DnsAnswer> authorities;
         std::vector<DnsAnswer> additionals;
 
-        static DnsPacket generate_default();
+        static DnsPacket generate(uint16_t id, bool response, bool recursion);
 
         void add_question(std::string name, uint16_t type);
 
-
+        friend std::ostream &operator<<(std::ostream &os, const DnsPacket &packet);
     };
 
 }

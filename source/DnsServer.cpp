@@ -37,7 +37,7 @@ namespace Dns
 
     void DnsServer::lookup(std::array<uint8_t, DNS_BUF_SIZE> buf, ip::udp::endpoint client)
     {
-        ip::udp::endpoint name_server(ip::address::from_string("192.33.4.12"), 53);
+        ip::udp::endpoint name_server(ip::address::from_string("8.8.8.8"), 53);
 
         LOG("performing lookup for client: " + client.address().to_string() + "\n");
         LOG("performing lookup on server: " + name_server.address().to_string() + "\n");
@@ -51,8 +51,7 @@ namespace Dns
     {
         if(ec) return;
         LOG("received from client: " + client.address().to_string() + "\n");
-
-
+        Dns::DnsPacket packet{buf, bytes_read};
         lookup(buf, client);
 
         client_socket.async_receive_from(buffer(buf), client, [&buf, this, &client](const auto& ec, std::size_t bytes_read){

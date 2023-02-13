@@ -1,5 +1,7 @@
 #include <stdexcept>
 #include "BufferParser.h"
+#include <range/v3/all.hpp>
+
 
 
 namespace
@@ -200,7 +202,7 @@ namespace Dns
     template uint32_t BufferParser::read<uint32_t>();
 
     template<typename T>
-    requires std::integral<T>
+    requires std::integral<T> || std::is_same_v<T, std::byte>
     void BufferBuilder::write(T bytes) {
         if (position + sizeof(T) > buf.size())
             throw std::invalid_argument{"trying to write position outside of the Buffer"};
@@ -211,12 +213,40 @@ namespace Dns
             ++position;
         }
     }
-    void BufferBuilder::write_header(const DnsHeader &header) {
 
+    // for tests
+    template void BufferBuilder::write<uint8_t>(uint8_t);
+    template void BufferBuilder::write<uint16_t>(uint16_t);
+    template void BufferBuilder::write<uint32_t>(uint32_t);
+
+    void BufferBuilder::write_header(const DnsHeader &header) {
+        write(header.id);
+        write(header.flags1);
+        write(header.flags2);
+        write(header.question_count);
+        write(header.answer_count);
+        write(header.authority_count);
+        write(header.addtional_count);
+    }
+
+    void BufferBuilder::write_name(const std::string& name) {
+        auto rng = name
+                   | ranges::view::split('.')
+                   | ranges::view::transform([](auto&& rng) {
+            return std::string_view(&*rng.begin(), ranges::distance(rng));
+        });
+        for (auto label : rng){
+            write<uint8_t>(label.size());
+            for (auto& c : label)
+                write<std::byte>(std::byte(c));
+        }
+        write<uint8_t>(0);
     }
 
     void BufferBuilder::write_question(const DnsQuestion &question) {
-
+        write_name(question.name);
+        write<uint16_t>(question.query_type);
+        write<uint16_t>(question.query_class);
     }
 
     void BufferBuilder::buildPacket() {
@@ -226,12 +256,13 @@ namespace Dns
             write_question(q);
     }
 
-    std::array<uint8_t, DNS_BUF_SIZE> BufferBuilder::get_buf() {
-        return std::array<uint8_t, DNS_BUF_SIZE>();
+    std::array<uint8_t, DNS_BUF_SIZE>& BufferBuilder::get_buf() {
+        return buf;
     }
 
-    std::array<uint8_t, DNS_BUF_SIZE> BufferBuilder::build_and_get_buf() {
-        return std::array<uint8_t, DNS_BUF_SIZE>();
+    std::array<uint8_t, DNS_BUF_SIZE>& BufferBuilder::build_and_get_buf() {
+        buildPacket();
+        return buf;
     }
 
     BufferBuilder::BufferBuilder(const DnsPacket &packet)

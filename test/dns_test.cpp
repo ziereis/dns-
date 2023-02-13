@@ -65,8 +65,10 @@ TEST_CASE("BufferParser read") {
 
 TEST_CASE("packet building")
 {
-    auto packet = Dns::DnsPacket::generate_default();
+    auto packet = Dns::DnsPacket::generate(10, false, false);
+    packet.add_question("google.com", 1);
 
+    CHECK_EQ(10, packet.header_.id);
     CHECK_EQ(1, packet.header_.question_count);
     CHECK_EQ("google.com", packet.questions[0].name);
 
@@ -74,13 +76,120 @@ TEST_CASE("packet building")
 
 TEST_CASE("buffer generation from packet")
 {
-    auto packet = Dns::DnsPacket::generate_default();
-    Dns::BufferBuilder builder{packet};
+    SUBCASE("write uint16")
+    {
+        auto packet = Dns::DnsPacket::generate(10, false, false);
+        Dns::BufferBuilder builder{packet};
+        builder.write<uint16_t>(63001);
+        auto buf = builder.get_buf();
+
+        Dns::BufferParser parser{buf};
+
+        auto val = parser.read<uint16_t>();
+
+        CHECK_EQ(63001, val);
+    }
+    SUBCASE("write multiple")
+    {
+        auto packet = Dns::DnsPacket::generate(10, false, false);
+        Dns::BufferBuilder builder{packet};
+        builder.write<uint16_t>(63001);
+        builder.write<uint8_t>(14);
+        builder.write<uint8_t>(20);
+        builder.write<uint32_t>(17012345);
+        builder.write<std::byte>(std::byte(20));
+        builder.write<uint16_t>(999);
+        auto buf = builder.get_buf();
+
+        Dns::BufferParser parser{buf};
+
+        auto val = parser.read<uint16_t>();
+        auto val2 = parser.read<uint8_t>();
+        auto val3 = parser.read<uint8_t>();
+        auto val4 = parser.read<uint32_t>();
+        auto val5 = parser.read<uint8_t>();
+        auto val6 = parser.read<uint16_t>();
+
+        CHECK_EQ(63001, val);
+        CHECK_EQ(14, val2);
+        CHECK_EQ(20, val3);
+        CHECK_EQ(17012345, val4);
+        CHECK_EQ(20, val5);
+        CHECK_EQ(999, val6);
+    }
+
+    SUBCASE("write name")
+    {
+        auto packet = Dns::DnsPacket::generate(10, false, false);
+        Dns::BufferBuilder builder{packet};
+        builder.write_name("testname.ggg");
+        builder.write<uint8_t>(15);
+        auto buf = builder.get_buf();
+
+        Dns::BufferParser parser{buf};
+
+        auto val = parser.read_name();
+        auto val2 = parser.read<uint8_t>();
+
+        CHECK_EQ("testname.ggg", val);
+        CHECK_EQ(15, val2);
+    }
+    SUBCASE("write default_packet")
+    {
+        auto packet = Dns::DnsPacket::generate(10, true, true);
+        packet.add_question("google.com", 1);
+        Dns::BufferBuilder builder{packet};
+        auto buf = builder.build_and_get_buf();
+
+        Dns::BufferParser parser{buf};
+
+        auto header = parser.read_header();
+        auto question = parser.read_question();
+        INFO(packet.header_);
+        INFO(packet.questions[0]);
+        INFO(header);
+        INFO(question);
+        CHECK_EQ(10, header.id);
+        CHECK_EQ(true, header.get_recursion_desired());
+        CHECK_EQ(true, header.get_query_response());
+        CHECK_EQ("google.com", question.name);
+        CHECK_EQ(1, question.query_type);
+    }
 
 }
 
+TEST_CASE("requests")
+{
+    SUBCASE("default_request")
+    {
+        io_context ctx;
+        boost::system::error_code ec;
+        ip::udp::socket socket(ctx);
 
+        ip::udp::endpoint me(ip::address_v4::any(), 991);
+        ip::udp::endpoint server(ip::address::from_string("1.1.1.1"), 53);
 
+        socket.open(ip::udp::v4(), ec);
+        socket.bind(me, ec);
+
+        auto packet = Dns::DnsPacket::generate(10, false, true);
+        packet.add_question("google.com", 1);
+        Dns::BufferBuilder builder{packet};
+        auto buf = builder.build_and_get_buf();
+
+        socket.send_to(buffer(buf), server);
+
+        std::cout << "waiting" << std::endl;
+
+        std::array<uint8_t, DNS_BUF_SIZE> recv_buf{};
+        size_t bytes_received = socket.receive(buffer(recv_buf));
+
+        Dns::DnsPacket in_packet{recv_buf, bytes_received};
+        INFO(packet);
+        INFO(in_packet);
+        CHECK_EQ(in_packet.header_.answer_count, 1);
+    }
+}
 
 std::vector<uint8_t> generate_buffer_from_label_vec(std::span<std::string> domain)
 {
@@ -162,22 +271,23 @@ TEST_CASE("BufferParser read_name")
     {
         std::vector<std::string> domain{"www", "coolio","com"};
         auto buf = generate_buffer_from_label_vec(domain);
+        buf.push_back(1);
         Dns::BufferParser parser{std::span(buf)};
         auto name = parser.read_name();
+        auto val = parser.read<uint8_t>();
         auto ref_name = std::accumulate(domain.begin(), domain.end(), std::string{}, [](auto sum, auto str)
             { return sum + str + ".";});
         ref_name.pop_back();
         INFO("reference Value: ", ref_name);
         INFO("parsed Value: ", name);
-        CHECK((name == ref_name));
+        CHECK_EQ(name,ref_name);
+        CHECK_EQ(1,val);
     }
 
     SUBCASE("empty_name")
     {
         std::vector<std::string> domain{""};
         auto buf = generate_buffer_from_label_vec(domain);
-        // has to be 1 bigger to not throw exception at seek
-        buf.push_back(0);
         Dns::BufferParser parser{std::span(buf)};
         auto name = parser.read_name();
         auto ref_name = std::accumulate(domain.begin(), domain.end(), std::string{}, [](auto sum, auto str)

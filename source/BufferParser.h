@@ -70,16 +70,17 @@ public:
     public:
         void write_header(const DnsHeader& header);
         void write_question(const DnsQuestion& question);
+        void write_name(const std::string& name);
 
         template<typename T>
-        requires std::integral<T>
+        requires std::integral<T> || std::is_same_v<T, std::byte>
         void write(T bytes);
 
         explicit BufferBuilder(const DnsPacket& packet);
 
         void buildPacket();
-        std::array<uint8_t, DNS_BUF_SIZE> get_buf();
-        std::array<uint8_t, DNS_BUF_SIZE> build_and_get_buf();
+        std::array<uint8_t, DNS_BUF_SIZE>& get_buf();
+        std::array<uint8_t, DNS_BUF_SIZE>& build_and_get_buf();
     private:
         std::size_t position;
         const DnsPacket& packet;

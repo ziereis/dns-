@@ -42,16 +42,32 @@ namespace Dns
 
     }
 
-    DnsPacket DnsPacket::generate_default() {
+    DnsPacket DnsPacket::generate(uint16_t id, bool response, bool recursion ) {
         DnsPacket packet{};
-        packet.header_ = DnsHeader::generate(1, false, true);
-        packet.add_question("google.com", 1);
+        packet.header_ = DnsHeader::generate(id, response, recursion);
         return packet;
     }
 
     void DnsPacket::add_question(std::string name, uint16_t type) {
         ++header_.question_count;
-        questions.emplace_back(DnsQuestion{std::move(name), type, 0});
+        questions.emplace_back(DnsQuestion{name, type, 1});
+    }
+
+    std::ostream &operator<<(std::ostream &os, const DnsPacket &packet) {
+        os << "header_: " << packet.header_
+        << "\nquestions:\n";
+        for (auto & q : packet.questions)
+            os << q << std::endl;
+        os << "\nanswers:\n";
+        for (auto & q : packet.answers)
+            os << q << std::endl;
+        os << "\nauthorities:\n";
+        for (auto & q : packet.authorities)
+            os << q << std::endl;
+        os << "\nadditional:\n";
+        for (auto & q : packet.additionals)
+            os << q << std::endl;
+        return os;
     }
 
 
@@ -142,13 +158,13 @@ namespace Dns
 
     void DnsHeader::set_query_response(bool response) {
         if (response)
-            flags2 |= Flags::QUERY_RESPONSE;
+            flags1 |= Flags::QUERY_RESPONSE;
         else
-            flags2 &= ~Flags::QUERY_RESPONSE;
+            flags1 &= ~Flags::QUERY_RESPONSE;
     }
 
     DnsHeader DnsHeader::generate(uint16_t id, bool response, bool recursion) {
-        DnsHeader header;
+        DnsHeader header{};
         header.id = id;
         header.flags1 = 0;
         header.flags2 = 0;

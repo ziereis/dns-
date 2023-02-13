@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 23)
 find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
 find_package(doctest REQUIRED)
+find_package(range-v3 REQUIRED)
 
 include(CTest)
 enable_testing()
