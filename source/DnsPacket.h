@@ -151,6 +151,7 @@ namespace Dns
     public:
 
         DnsPacket(const std::array<uint8_t, DNS_BUF_SIZE>& buf, size_t bytes_read);
+        DnsPacket(const uint8_t* buf, std::size_t size, std::size_t bytes_read);
         DnsPacket() = default;
         Dns::DnsHeader header_;
         std::vector<DnsQuestion> questions;

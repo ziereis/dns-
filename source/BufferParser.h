@@ -48,12 +48,6 @@ public:
 
         ip::address_v6::bytes_type read_ipv6();
 
-        uint8_t read_u8();
-        uint16_t read_u16();
-        uint32_t read_u32();
-
-
-
         std::string read_name();
     private:
 

@@ -14,30 +14,53 @@ namespace Dns
     {
         BufferParser parser{std::span(buf.data(), bytes_read)};
         header_ = parser.read_header();
-        LOG(header_);
 
         for(size_t i = 0; i < header_.question_count; i++)
         {
             questions.emplace_back(parser.read_question());
-            LOG(questions.back());
         }
 
         for(size_t i = 0; i < header_.answer_count; i++)
         {
             answers.emplace_back(parser.read_answer());
-            LOG(answers.back());
         }
 
         for(size_t i = 0; i < header_.authority_count; i++)
         {
             authorities.emplace_back(parser.read_answer());
-            LOG(authorities.back());
         }
 
         for(size_t i = 0; i < header_.addtional_count; i++)
         {
             additionals.emplace_back(parser.read_answer());
-            LOG(additionals.back());
+        }
+
+    }
+
+    DnsPacket::DnsPacket(const uint8_t* buf, std::size_t size, std::size_t bytes_read)
+            : header_{}, questions{}, answers{}, authorities{}, additionals{}
+    {
+        BufferParser parser{std::span(buf, bytes_read)};
+        header_ = parser.read_header();
+
+        for(size_t i = 0; i < header_.question_count; i++)
+        {
+            questions.emplace_back(parser.read_question());
+        }
+
+        for(size_t i = 0; i < header_.answer_count; i++)
+        {
+            answers.emplace_back(parser.read_answer());
+        }
+
+        for(size_t i = 0; i < header_.authority_count; i++)
+        {
+            authorities.emplace_back(parser.read_answer());
+        }
+
+        for(size_t i = 0; i < header_.addtional_count; i++)
+        {
+            additionals.emplace_back(parser.read_answer());
         }
 
     }

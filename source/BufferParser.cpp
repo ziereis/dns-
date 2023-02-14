@@ -33,19 +33,12 @@ namespace Dns
     }
 
     DnsAnswer BufferParser::read_answer(){
-        LOG(position);
         auto name = read_name();
-        LOG(position);
-        auto query_type = get_query_type(read_u16());
-        LOG(position);
-        auto query_class = read_u16();
-        LOG(position);
-        auto ttl = read_u32();
-        LOG(position);
-        auto len = read_u16();
-        LOG(position);
+        auto query_type = get_query_type(read<uint16_t>());
+        auto query_class = read<uint16_t>();
+        auto ttl = read<uint32_t>();
+        auto len = read<uint16_t>();
         auto record  = read_record(query_type);
-        LOG(position);
         return {name, query_type, query_class, ttl,
                 len, std::move(record)};
     }
@@ -54,7 +47,7 @@ namespace Dns
         switch (query_type) {
             case QueryType::A:
                 LOG("A");
-                return DnsAnswer::A{read_u32()};
+                return DnsAnswer::A{read<uint32_t>()};
             case QueryType::AAA:
                 LOG("AAA");
                 return DnsAnswer::AAA{read_ipv6()};
@@ -91,8 +84,6 @@ namespace Dns
                     seek(local_pos + 2);
 
                 auto offset = get<uint16_t>(local_pos) & ~(static_cast<uint16_t>(JUMP_MASK) << 8);
-                LOG(std::bitset<8>(len));
-                LOG(std::bitset<16>(offset));
                 local_pos = static_cast<size_t>(offset);
 
                 jump_counter++;
@@ -174,27 +165,6 @@ namespace Dns
                 : buf_view{buf_view}
                 , position{0}
         {}
-
-    uint8_t BufferParser::read_u8() {
-        if (position >= buf_view.size())
-            throw std::invalid_argument("read out of bounds");
-        auto result = buf_view[position];
-        position++;
-        return result;
-
-    }
-
-    uint16_t BufferParser::read_u16() {
-        return (static_cast<uint16_t>(read_u8()) << 8)
-        | static_cast<uint16_t>(read_u8()) ;
-    }
-
-    uint32_t BufferParser::read_u32() {
-        return (static_cast<uint32_t>(read_u8()) << 24)
-        | (static_cast<uint32_t>(read_u8()) << 16)
-        | (static_cast<uint32_t>(read_u8()) << 8)
-        | static_cast<uint32_t>(read_u8()) ;
-    }
 
     // for tests
     template uint8_t BufferParser::read<uint8_t>();

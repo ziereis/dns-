@@ -3,12 +3,38 @@
 //
 
 #include "DnsServer.h"
+
+#include <utility>
 #include "fmt/core.h"
 namespace Dns
 {
+    struct client_request_handler{
+        ip::udp::socket& client_socket_;
+        ip::udp::socket& lookup_socket_;
+        uint8_t* buf_;
+        std:: size_t buf_size_;
+        ip::udp::endpoint* client;
+
+        void operator()(boost::system::error_code ec, std::size_t bytes_read)
+        {
+            if (ec) throw std::system_error(ec);
+            auto lookup_handler = std::make_shared<LookupHandler>(
+                    std::span<uint8_t>(buf_, bytes_read),  lookup_socket_, client_socket_, *client);
+            lookup_handler->start();
+
+            initiate();
+        }
+
+        void initiate()
+        {
+            client_socket_.async_receive_from(buffer(buf_, buf_size_), *client, std::move(*this));
+        }
+    };
+
     DnsServer::DnsServer()
-            : client_socket(io)
-            , lookup_socket(io)
+            : client_socket(ctx)
+            , lookup_socket(ctx)
+            , buf{}
     {}
 
     void DnsServer::start_server(uint16_t port)
@@ -21,68 +47,51 @@ namespace Dns
 
         ip::udp::endpoint server_ep(ip::address_v4::any(), 5234);
         lookup_socket.open(ip::udp::v4(), ec);
-        lookup_socket.bind(client_ep, ec);
+        lookup_socket.bind(server_ep, ec); //lol
 
-        std::array<uint8_t, DNS_BUF_SIZE> buf{};
 
         ip::udp::endpoint client;
-        client_socket.async_receive_from(buffer(buf), client, [&buf, this, &client] (const auto& ec, std::size_t bytes_read){
-            handle_incoming_request(ec, bytes_read, buf, client);
-        });
-
-        io.run();
+        client_request_handler{client_socket, lookup_socket, buf.data(), buf.size(), &client}.initiate();
+        ctx.run();
     }
 
-
-
-    void DnsServer::lookup(std::array<uint8_t, DNS_BUF_SIZE> buf, ip::udp::endpoint client)
+    LookupHandler::LookupHandler(std::span<const uint8_t> buf_view, ip::udp::socket& lookup_socket,
+                                 ip::udp::socket& client_socket, ip::udp::endpoint client)
+    : lookup_socket_{lookup_socket}
+    , client_socket_{client_socket}
+    , client_{client}
+    , server_{ip::address::from_string("8.8.8.8"), 53}
+    , buf_{}
     {
-        ip::udp::endpoint name_server(ip::address::from_string("8.8.8.8"), 53);
-
-        LOG("performing lookup for client: " + client.address().to_string() + "\n");
-        LOG("performing lookup on server: " + name_server.address().to_string() + "\n");
-        lookup_socket.async_send_to(buffer(buf), name_server, [this, &client](const auto&ec, size_t bytes_sent) {
-            handle_lookup(ec, bytes_sent, client);});
+        std::memcpy(buf_.data(), buf_view.data(), buf_view.size());
     }
 
-    void DnsServer::handle_incoming_request(const boost::system::error_code& ec,
-                                 size_t bytes_read,
-                                 std::array<uint8_t, DNS_BUF_SIZE> buf, ip::udp::endpoint client)
+    void LookupHandler::start()
     {
-        if(ec) return;
-        LOG("received from client: " + client.address().to_string() + "\n");
-        Dns::DnsPacket packet{buf, bytes_read};
-        lookup(buf, client);
-
-        client_socket.async_receive_from(buffer(buf), client, [&buf, this, &client](const auto& ec, std::size_t bytes_read){
-            handle_incoming_request(ec, bytes_read, buf, client);
-        });
-
+        lookup_socket_.async_send_to(buffer(buf_), server_, [me=shared_from_this()](const auto&ec, std::size_t bytes_sent) {
+            if (ec) throw std::system_error(ec);
+            me->handle_lookup(ec, bytes_sent);});
     }
 
-    void DnsServer::handle_lookup(const boost::system::error_code &ec, size_t bytes_read,
-                                  ip::udp::endpoint client) {
+    void LookupHandler::handle_lookup(const boost::system::error_code &ec, std::size_t bytes_read) {
 
-        std::array<uint8_t, DNS_BUF_SIZE> buf{};
-
-        LOG("receiving from dns server for client: " + client.address().to_string() + "\n");
-        lookup_socket.async_receive(buffer(buf), [&buf, this, &client] (const auto& ec, std::size_t bytes_read){
-            handle_server_response(ec, bytes_read, buf, client);
+        lookup_socket_.async_receive(buffer(buf_), [me=shared_from_this()](const auto &ec, std::size_t bytes_read) {
+            if (ec) throw std::system_error(ec);
+            me->handle_server_response(ec, bytes_read);
         });
-
-
     }
 
+    void LookupHandler::handle_server_response(const boost::system::error_code &ec, std::size_t bytes_read)
+    {
 
-    void DnsServer::handle_server_response(const boost::system::error_code &ec, size_t bytes_read,
-                                           std::array<uint8_t, DNS_BUF_SIZE> buf, ip::udp::endpoint client) {
+        Dns::DnsPacket packet{buf_, bytes_read};
 
-        LOG("handling answer from dns server for client: " + client.address().to_string() + "\n");
-        Dns::DnsPacket packet{buf, bytes_read};
-        LOG("finished parsing packet\n")
-
+        LOG(packet);
+        LOG(client_);
         if (!packet.answers.empty()) {
-            client_socket.async_send_to(buffer(buf), client, [](const auto &ec, std::size_t bytes_read) {
+            client_socket_.async_send_to(buffer(buf_), client_, [](const auto &ec, std::size_t bytes_read) {
+                if (ec) throw std::system_error(ec);
+
                 std::cout << "return packet to client" << std::endl;
             });
         } else if (!packet.additionals.empty()) {
@@ -90,6 +99,5 @@ namespace Dns
             std::visit(RecordPrintVisitor{},additional.record);
         }
     }
-
 
 }

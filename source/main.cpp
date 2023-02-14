@@ -1,6 +1,28 @@
 #include "DnsServer.h"
 #include "BufferParser.h"
 
+struct process {
+    ip::udp::socket& socket;
+    uint8_t* buf;
+    std::size_t size_;
+    void operator()(boost::system::error_code ec, std::size_t bytes)
+    {
+        if (ec) throw std::system_error(ec);
+
+        Dns::DnsPacket packet{buf, size_, bytes};
+        std::cout << packet;
+
+        initiate();
+    }
+    void initiate() {
+        socket.async_receive(buffer(buf, size_), std::move(*this));
+    }
+
+
+
+
+};
+
 int main()
 {
     auto server = Dns::DnsServer();
@@ -23,14 +45,12 @@ int main()
     Dns::BufferBuilder builder{packet};
     auto buf = builder.build_and_get_buf();
 
-    socket.async_send_to(buffer(buf), server, [&socket](const auto& ec, auto bytes){
-        std::array<uint8_t, DNS_BUF_SIZE> recv_buf{};
-        socket.async_receive(buffer(recv_buf),[recv_buf](const boost::system::error_code& ec, size_t bytes){
-            Dns::DnsPacket in_packet{recv_buf, bytes};
-            std::cout << in_packet.header_;
-        });
-    });
+    uint8_t recv_buf[DNS_BUF_SIZE];
 
+    socket.async_send_to(buffer(buf), server,[](const auto& ec,  auto aa){ std::cout << "sent\n";});
+
+
+    process{socket, recv_buf, DNS_BUF_SIZE}.initiate();
     ctx.run();
 */
 }
