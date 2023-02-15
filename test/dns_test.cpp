@@ -160,8 +160,8 @@ TEST_CASE("buffer generation from packet")
 
 TEST_CASE("requests")
 {
-    SUBCASE("default_request")
-    {
+/*
+        SUBCASE("default_request"){
         io_context ctx;
         boost::system::error_code ec;
         ip::udp::socket socket(ctx);
@@ -188,6 +188,69 @@ TEST_CASE("requests")
         INFO(packet);
         INFO(in_packet);
         CHECK_EQ(in_packet.header_.answer_count, 1);
+    }
+    SUBCASE("root ns query")
+    {
+        io_context ctx;
+        boost::system::error_code ec;
+        ip::udp::socket socket(ctx);
+
+        ip::udp::endpoint me(ip::address_v4::any(), 991);
+        ip::udp::endpoint server(ip::address::from_string("198.41.0.4"), 53);
+
+        socket.open(ip::udp::v4(), ec);
+        socket.bind(me, ec);
+
+        auto packet = Dns::DnsPacket::generate(10, false, true);
+        packet.add_question("google.com", 1);
+        Dns::BufferBuilder builder{packet};
+        auto buf = builder.build_and_get_buf();
+
+        socket.send_to(buffer(buf), server);
+
+        std::cout << "waiting" << std::endl;
+
+        std::array<uint8_t, DNS_BUF_SIZE> recv_buf{};
+        size_t bytes_received = socket.receive(buffer(recv_buf));
+
+        Dns::DnsPacket in_packet{recv_buf.data(), bytes_received};
+        INFO(packet);
+        INFO(in_packet);
+        CHECK_EQ(0,  in_packet.header_.get_response_code());
+        CHECK_EQ(in_packet.header_.authority_count, 13);
+    }
+*/
+
+    SUBCASE("sub root ns query")
+    {
+        io_context ctx;
+        boost::system::error_code ec;
+        ip::udp::socket socket(ctx);
+
+        ip::udp::endpoint me(ip::address_v4::any(), 991);
+        ip::udp::endpoint server(ip::address::from_string("192.5.6.30"), 53);
+
+        socket.open(ip::udp::v4(), ec);
+        socket.bind(me, ec);
+
+        auto packet = Dns::DnsPacket::generate(10, false, true);
+        packet.add_question("youtube.com", 1);
+        Dns::BufferBuilder builder{packet};
+        auto buf = builder.build_and_get_buf();
+
+        socket.send_to(buffer(buf), server);
+
+        std::cout << "waiting" << std::endl;
+
+        std::array<uint8_t, DNS_BUF_SIZE> recv_buf{};
+        size_t bytes_received = socket.receive(buffer(recv_buf));
+
+        Dns::DnsPacket in_packet{recv_buf.data(), bytes_received};
+        INFO(packet);
+        INFO(in_packet);
+        INFO(fmt::f);
+        CHECK_EQ(0,  in_packet.header_.get_response_code());
+        CHECK_EQ(in_packet.header_.authority_count, 13);
     }
 }
 

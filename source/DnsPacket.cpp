@@ -69,26 +69,26 @@ namespace Dns
 
     std::vector<ip::address_v4> DnsPacket::get_resolved_ns(std::string_view qname) {
         auto ns_range = authorities
-            | ranges::view::filter([qname](auto auth){
+            | ranges::views::filter([qname](auto& auth){
                 return qname.ends_with(auth.name)
                 && std::get_if<Dns::DnsAnswer::NS>(&auth.record);
                 })
-            | ranges::view::transform([](auto authority){
+            | ranges::views::transform([](auto& authority){
                 return std::get<Dns::DnsAnswer::NS>(authority.record).name;
             });
 
         auto resolved_ns_ipv4 = additionals
-            | ranges::view::filter([&ns_range](auto additional){
+            | ranges::views::filter([&ns_range](auto& additional){
                 return ranges::find_if(ns_range,[&additional](auto name){
                     return additional.name == name;
                 }) != ns_range.end();
             })
-            | ranges::view::filter([](auto additional){
+            | ranges::views::filter([](auto& additional){
                 if (const DnsAnswer::A* record = std::get_if<Dns::DnsAnswer::A>(&additional.record))
                     return true;
                 return false;
             })
-            | ranges::view::transform([](auto additional){
+            | ranges::views::transform([](auto& additional){
                 return std::get<Dns::DnsAnswer::A>(additional.record).ip4Addr;
             });
         return {resolved_ns_ipv4.begin(), resolved_ns_ipv4.end()};

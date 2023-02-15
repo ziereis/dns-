@@ -63,7 +63,7 @@ namespace Dns
     : lookup_socket_{lookup_socket}
     , client_socket_{client_socket}
     , client_{client}
-    , server_{ip::address::from_string("192.5.6.30"), 53}
+    , server_{ip::address::from_string("8.8.8.8"), 53}
     , original_req_buf_{}
     , buf_{}
     {

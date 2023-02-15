@@ -6,7 +6,7 @@ namespace Dns
 
     template<typename T, typename Head, typename... Offsets>
     requires std::integral<T> && std::integral<Head>
-    void set_bits_at_offsets(T& number, bool value, Head head, Offsets... offsets)
+    void set_bits_at_offsets(T& number, Head head, Offsets... offsets)
     {
         if (head >= sizeof(T) * 8)
             throw std::invalid_argument{"offset is out of bounds"};
