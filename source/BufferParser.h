@@ -73,8 +73,8 @@ public:
         explicit BufferBuilder(const DnsPacket& packet);
 
         void buildPacket();
-        std::array<uint8_t, DNS_BUF_SIZE>& get_buf();
-        std::array<uint8_t, DNS_BUF_SIZE>& build_and_get_buf();
+        std::span<uint8_t> get_buf();
+        std::span<uint8_t> build_and_get_buf();
     private:
         std::size_t position;
         const DnsPacket& packet;

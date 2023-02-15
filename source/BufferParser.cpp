@@ -226,13 +226,13 @@ namespace Dns
             write_question(q);
     }
 
-    std::array<uint8_t, DNS_BUF_SIZE>& BufferBuilder::get_buf() {
-        return buf;
+    std::span<uint8_t> BufferBuilder::get_buf() {
+        return {buf.data(), position};
     }
 
-    std::array<uint8_t, DNS_BUF_SIZE>& BufferBuilder::build_and_get_buf() {
+    std::span<uint8_t> BufferBuilder::build_and_get_buf() {
         buildPacket();
-        return buf;
+        return get_buf();
     }
 
     BufferBuilder::BufferBuilder(const DnsPacket &packet)

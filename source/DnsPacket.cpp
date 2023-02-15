@@ -84,9 +84,7 @@ namespace Dns
                 }) != ns_range.end();
             })
             | ranges::views::filter([](auto& additional){
-                if (const DnsAnswer::A* record = std::get_if<Dns::DnsAnswer::A>(&additional.record))
-                    return true;
-                return false;
+                return std::get_if<Dns::DnsAnswer::A>(&additional.record);
             })
             | ranges::views::transform([](auto& additional){
                 return std::get<Dns::DnsAnswer::A>(additional.record).ip4Addr;

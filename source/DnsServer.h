@@ -25,6 +25,7 @@ namespace Dns
         ip::udp::endpoint client_;   // copy
         ip::udp::endpoint server_;
         std::array<uint8_t, DNS_BUF_SIZE> original_req_buf_; //copy with memcpy
+        std::size_t original_req_buf_size_;
         std::array<uint8_t, DNS_BUF_SIZE> buf_; // for lookups
     };
 
