@@ -184,7 +184,7 @@ TEST_CASE("requests")
         std::array<uint8_t, DNS_BUF_SIZE> recv_buf{};
         size_t bytes_received = socket.receive(buffer(recv_buf));
 
-        Dns::DnsPacket in_packet{recv_buf, bytes_received};
+        Dns::DnsPacket in_packet{recv_buf.data(), bytes_received};
         INFO(packet);
         INFO(in_packet);
         CHECK_EQ(in_packet.header_.answer_count, 1);

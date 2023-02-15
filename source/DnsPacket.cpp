@@ -6,38 +6,12 @@
 #include <utility>
 #include "DnsPacket.h"
 #include "BufferParser.h"
+#include <range/v3/all.hpp>
+#include "fmt/ranges.h"
 
 namespace Dns
 {
-    DnsPacket::DnsPacket(const std::array<uint8_t, DNS_BUF_SIZE>& buf, size_t bytes_read)
-    : header_{}, questions{}, answers{}, authorities{}, additionals{}
-    {
-        BufferParser parser{std::span(buf.data(), bytes_read)};
-        header_ = parser.read_header();
-
-        for(size_t i = 0; i < header_.question_count; i++)
-        {
-            questions.emplace_back(parser.read_question());
-        }
-
-        for(size_t i = 0; i < header_.answer_count; i++)
-        {
-            answers.emplace_back(parser.read_answer());
-        }
-
-        for(size_t i = 0; i < header_.authority_count; i++)
-        {
-            authorities.emplace_back(parser.read_answer());
-        }
-
-        for(size_t i = 0; i < header_.addtional_count; i++)
-        {
-            additionals.emplace_back(parser.read_answer());
-        }
-
-    }
-
-    DnsPacket::DnsPacket(const uint8_t* buf, std::size_t size, std::size_t bytes_read)
+    DnsPacket::DnsPacket(const uint8_t* buf, std::size_t bytes_read)
             : header_{}, questions{}, answers{}, authorities{}, additionals{}
     {
         BufferParser parser{std::span(buf, bytes_read)};
@@ -91,6 +65,33 @@ namespace Dns
         for (auto & q : packet.additionals)
             os << q << std::endl;
         return os;
+    }
+
+    std::vector<ip::address_v4> DnsPacket::get_resolved_ns(std::string_view qname) {
+        auto ns_range = authorities
+            | ranges::view::filter([qname](auto auth){
+                return qname.ends_with(auth.name)
+                && std::get_if<Dns::DnsAnswer::NS>(&auth.record);
+                })
+            | ranges::view::transform([](auto authority){
+                return std::get<Dns::DnsAnswer::NS>(authority.record).name;
+            });
+
+        auto resolved_ns_ipv4 = additionals
+            | ranges::view::filter([&ns_range](auto additional){
+                return ranges::find_if(ns_range,[&additional](auto name){
+                    return additional.name == name;
+                }) != ns_range.end();
+            })
+            | ranges::view::filter([](auto additional){
+                if (const DnsAnswer::A* record = std::get_if<Dns::DnsAnswer::A>(&additional.record))
+                    return true;
+                return false;
+            })
+            | ranges::view::transform([](auto additional){
+                return std::get<Dns::DnsAnswer::A>(additional.record).ip4Addr;
+            });
+        return {resolved_ns_ipv4.begin(), resolved_ns_ipv4.end()};
     }
 
 
@@ -186,6 +187,13 @@ namespace Dns
             flags1 &= ~Flags::QUERY_RESPONSE;
     }
 
+    void DnsHeader::set_reserved(uint8_t reserved) {
+        if (reserved > 8) throw std::invalid_argument{"trying to set 3 bit value greater then 8"};
+
+        flags2 = ( flags2 & ~Flags::RESERVED) | (reserved << 4);
+
+    }
+
     DnsHeader DnsHeader::generate(uint16_t id, bool response, bool recursion) {
         DnsHeader header{};
         header.id = id;
@@ -198,6 +206,7 @@ namespace Dns
         header.addtional_count = 0;
         return header;
     }
+
 
 
     std::ostream& operator<<(std::ostream &os, const DnsQuestion &question) {

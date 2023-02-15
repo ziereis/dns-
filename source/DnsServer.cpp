@@ -3,9 +3,12 @@
 //
 
 #include "DnsServer.h"
+#include "BufferParser.h"
 
 #include <utility>
-#include "fmt/core.h"
+#include "fmt/ranges.h"
+#include <range/v3/all.hpp>
+
 namespace Dns
 {
     struct client_request_handler{
@@ -60,21 +63,28 @@ namespace Dns
     : lookup_socket_{lookup_socket}
     , client_socket_{client_socket}
     , client_{client}
-    , server_{ip::address::from_string("8.8.8.8"), 53}
+    , server_{ip::address::from_string("192.5.6.30"), 53}
+    , original_req_buf_{}
     , buf_{}
     {
-        std::memcpy(buf_.data(), buf_view.data(), buf_view.size());
+        std::memcpy(original_req_buf_.data(), buf_view.data(), buf_view.size());
+        DnsPacket packet{original_req_buf_.data(), 512};
+        packet.header_.set_reserved(0);
+        BufferBuilder builder{packet};
+        original_req_buf_ = builder.build_and_get_buf();
     }
 
     void LookupHandler::start()
     {
-        lookup_socket_.async_send_to(buffer(buf_), server_, [me=shared_from_this()](const auto&ec, std::size_t bytes_sent) {
+        LOG("starting lookup")
+        lookup_socket_.async_send_to(buffer(original_req_buf_), server_, [me=shared_from_this()](const auto&ec, std::size_t bytes_sent) {
             if (ec) throw std::system_error(ec);
             me->handle_lookup(ec, bytes_sent);});
     }
 
     void LookupHandler::handle_lookup(const boost::system::error_code &ec, std::size_t bytes_read) {
 
+        LOG("handling lookup")
         lookup_socket_.async_receive(buffer(buf_), [me=shared_from_this()](const auto &ec, std::size_t bytes_read) {
             if (ec) throw std::system_error(ec);
             me->handle_server_response(ec, bytes_read);
@@ -84,19 +94,28 @@ namespace Dns
     void LookupHandler::handle_server_response(const boost::system::error_code &ec, std::size_t bytes_read)
     {
 
-        Dns::DnsPacket packet{buf_, bytes_read};
+        Dns::DnsPacket packet{buf_.data(), bytes_read};
+        Dns::DnsPacket packet2{original_req_buf_.data(), 512};
 
         LOG(packet);
+        LOG(packet2);
         LOG(client_);
-        if (!packet.answers.empty()) {
+        if ((!packet.answers.empty()
+        && packet.header_.get_response_code() == static_cast<uint8_t>(ResponseCode::NOERROR))
+        || packet.header_.get_response_code() == static_cast<uint8_t>(ResponseCode::NXDOMAIN)) {
             client_socket_.async_send_to(buffer(buf_), client_, [](const auto &ec, std::size_t bytes_read) {
                 if (ec) throw std::system_error(ec);
 
                 std::cout << "return packet to client" << std::endl;
             });
-        } else if (!packet.additionals.empty()) {
-            auto& additional = packet.additionals.back();
-            std::visit(RecordPrintVisitor{},additional.record);
+        } else if (packet.header_.addtional_count > 0) {
+            auto name_servers = packet.get_resolved_ns(packet.questions[0].name);
+            fmt::print("{}\n", name_servers | ranges::view::transform([](auto addr){return addr.to_string();}));
+            server_.address(name_servers[0]);
+            LOG(server_);
+            start();
+
+
         }
     }
 

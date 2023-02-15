@@ -51,6 +51,15 @@ namespace Dns
         UNKNOWN = 678
     };
 
+    enum class ResponseCode {
+        NOERROR = 0,
+        FORMERR,
+        SERVERFAIL,
+        NXDOMAIN,
+        NOTIMP,
+        REFUSED
+    };
+
     struct __attribute__((packed)) DnsHeader
     {
         uint16_t id;
@@ -75,6 +84,7 @@ namespace Dns
 
         void set_recursion_desired(bool recursion_desired);
         void set_recursion_available(bool recursion_available);
+        void set_reserved(uint8_t reserved);
         void set_query_response(bool response);
 
         static DnsHeader generate(uint16_t, bool response, bool recursion);
@@ -150,8 +160,7 @@ namespace Dns
     {
     public:
 
-        DnsPacket(const std::array<uint8_t, DNS_BUF_SIZE>& buf, size_t bytes_read);
-        DnsPacket(const uint8_t* buf, std::size_t size, std::size_t bytes_read);
+        DnsPacket(const uint8_t* buf, std::size_t bytes_read);
         DnsPacket() = default;
         Dns::DnsHeader header_;
         std::vector<DnsQuestion> questions;
@@ -162,6 +171,8 @@ namespace Dns
         static DnsPacket generate(uint16_t id, bool response, bool recursion);
 
         void add_question(std::string name, uint16_t type);
+
+        std::vector<ip::address_v4> get_resolved_ns(std::string_view qname);
 
         friend std::ostream &operator<<(std::ostream &os, const DnsPacket &packet);
     };
