@@ -10,6 +10,8 @@
 #include <iostream>
 #include <utility>
 #include <variant>
+#include <range/v3/all.hpp>
+
 using namespace boost::asio;
 
 #define ENABLE_DEBUG_LOG 1
@@ -172,7 +174,36 @@ namespace Dns
 
         void add_question(std::string name, uint16_t type);
 
-        std::vector<ip::address_v4> get_resolved_ns(std::string_view qname);
+        //have to implement here idk how to return a range
+        auto get_unresolved_ns(std::string_view qname) {
+            auto ns_range = authorities
+                   | ranges::views::filter([qname](auto& auth){
+                return qname.ends_with(auth.name)
+                       && std::get_if<Dns::DnsAnswer::NS>(&auth.record);
+            })
+                   | ranges::views::transform([](auto& authority){
+                return std::get<Dns::DnsAnswer::NS>(authority.record).name;
+            });
+            return ns_range;
+        }
+
+        auto get_resolved_ns(std::string_view qname) {
+            auto ns_range = get_unresolved_ns(qname);
+
+            auto resolved_ns_ipv4 = additionals
+                                    | ranges::views::filter([&ns_range](auto& additional){
+                return ranges::find_if(ns_range,[&additional](auto name){
+                    return additional.name == name;
+                }) != ns_range.end();
+            })
+                                    | ranges::views::filter([](auto& additional){
+                return std::get_if<Dns::DnsAnswer::A>(&additional.record);
+            })
+                                    | ranges::views::transform([](auto& additional){
+                return std::get<Dns::DnsAnswer::A>(additional.record).ip4Addr;
+            });
+            return resolved_ns_ipv4;
+        }
 
         friend std::ostream &operator<<(std::ostream &os, const DnsPacket &packet);
     };

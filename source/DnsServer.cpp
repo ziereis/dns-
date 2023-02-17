@@ -3,10 +3,10 @@
 //
 
 #include "DnsServer.h"
-#include "BufferParser.h"
 
 #include <utility>
 #include "fmt/ranges.h"
+#include "BufferParser.h"
 #include <range/v3/all.hpp>
 
 namespace Dns
@@ -60,10 +60,11 @@ namespace Dns
 
     LookupHandler::LookupHandler(std::span<const uint8_t> buf_view, ip::udp::socket& lookup_socket,
                                  ip::udp::socket& client_socket, ip::udp::endpoint client)
-    : lookup_socket_{lookup_socket}
+    : lookup_servers{{ip::address::from_string("8.8.8.8"), 53}}
+    , lookupState{ClientLookup{}}
+    , lookup_socket_{lookup_socket}
     , client_socket_{client_socket}
     , client_{client}
-    , server_{ip::address::from_string("8.8.8.8"), 53}
     , original_req_buf_{}
     , original_req_buf_size_{buf_view.size()}
     , buf_{}
@@ -71,12 +72,28 @@ namespace Dns
         std::memcpy(original_req_buf_.data(), buf_view.data(), buf_view.size());
     }
 
+    void LookupHandler::lookupStateVisitorForStart::operator()(ClientLookup&) const {
+        LOG("starting client lookup")
+        handler->lookup_socket_.async_send_to(buffer(handler->original_req_buf_.data(), handler->original_req_buf_size_),
+                                              handler->lookup_servers.top(), [me=handler->shared_from_this()](const auto& ec, std::size_t bytes_sent) {
+
+        if (ec) throw std::system_error(ec);
+        me->handle_lookup(ec, bytes_sent);});
+    }
+
+    void LookupHandler::lookupStateVisitorForStart::operator()(LookupHandler::NsLookup &) const {
+        LOG("starting server lookup")
+        handler->lookup_socket_.async_send_to(buffer(handler->buf_.data(), handler->buf_size_),
+                                              handler->lookup_servers, [me=handler->shared_from_this()](const auto& ec, std::size_t bytes_sent) {
+
+        if (ec) throw std::system_error(ec);
+        me->handle_lookup(ec, bytes_sent);});
+    }
+
+
     void LookupHandler::start()
     {
-        LOG("starting lookup")
-        lookup_socket_.async_send_to(buffer(original_req_buf_.data(), original_req_buf_size_), server_, [me=shared_from_this()](const auto&ec, std::size_t bytes_sent) {
-            if (ec) throw std::system_error(ec);
-            me->handle_lookup(ec, bytes_sent);});
+        std::visit(lookupStateVisitorForStart{this},lookupState);
     }
 
     void LookupHandler::handle_lookup(const boost::system::error_code &ec, std::size_t bytes_read) {
@@ -88,27 +105,41 @@ namespace Dns
         });
     }
 
+    void LookupHandler::lookupStateVisitorForHandlingServerResponse::operator()(LookupHandler::ClientLookup &) const {
+        handler->client_socket_.async_send_to(buffer(handler->buf_.data(), response_size), handler->client_, [](const auto &ec, std::size_t bytes_read) {
+            if (ec) throw std::system_error(ec);
+
+            std::cout << "return packet to client" << std::endl;
+        });
+
+    }
+
+    void LookupHandler::lookupStateVisitorForHandlingServerResponse::operator()(LookupHandler::NsLookup &) const {
+
+    }
+
     void LookupHandler::handle_server_response(const boost::system::error_code &ec, std::size_t bytes_read)
     {
-
-        Dns::DnsPacket packet{buf_.data(), bytes_read};
+        DnsPacket packet{buf_.data(), bytes_read};
 
         if ((!packet.answers.empty()
-        && packet.header_.get_response_code() == static_cast<uint8_t>(ResponseCode::NOERROR))
-        || packet.header_.get_response_code() == static_cast<uint8_t>(ResponseCode::NXDOMAIN)) {
-            client_socket_.async_send_to(buffer(buf_.data(), bytes_read), client_, [](const auto &ec, std::size_t bytes_read) {
-                if (ec) throw std::system_error(ec);
-
-                std::cout << "return packet to client" << std::endl;
-            });
+             && packet.header_.get_response_code() == static_cast<uint8_t>(ResponseCode::NOERROR))
+            || packet.header_.get_response_code() == static_cast<uint8_t>(ResponseCode::NXDOMAIN)) {
+            std::visit(lookupStateVisitorForHandlingServerResponse{this, bytes_read}, lookupState);
         } else if (packet.header_.addtional_count > 0) {
             auto name_servers = packet.get_resolved_ns(packet.questions[0].name);
             fmt::print("{}\n", name_servers | ranges::view::transform([](auto addr){return addr.to_string();}));
-            server_.address(name_servers[0]);
+            server_.address(*name_servers.begin());
             start();
-
-
+        } else if (packet.header_.addtional_count == 0 && packet.header_.authority_count > 0) {
+            auto unresolved_ns = packet.get_unresolved_ns(packet.questions[0].name);
+            fmt::print("{}\n", unresolved_ns);
+            auto pkt = DnsPacket::generate(1, false, true);
+            pkt.add_question(*unresolved_ns.begin(),1);
+            BufferBuilder builder{pkt};
+            auto buf = builder.build_and_get_buf();
         }
+
     }
 
 }

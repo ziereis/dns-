@@ -6,7 +6,6 @@
 #include <utility>
 #include "DnsPacket.h"
 #include "BufferParser.h"
-#include <range/v3/all.hpp>
 #include "fmt/ranges.h"
 
 namespace Dns
@@ -67,30 +66,8 @@ namespace Dns
         return os;
     }
 
-    std::vector<ip::address_v4> DnsPacket::get_resolved_ns(std::string_view qname) {
-        auto ns_range = authorities
-            | ranges::views::filter([qname](auto& auth){
-                return qname.ends_with(auth.name)
-                && std::get_if<Dns::DnsAnswer::NS>(&auth.record);
-                })
-            | ranges::views::transform([](auto& authority){
-                return std::get<Dns::DnsAnswer::NS>(authority.record).name;
-            });
 
-        auto resolved_ns_ipv4 = additionals
-            | ranges::views::filter([&ns_range](auto& additional){
-                return ranges::find_if(ns_range,[&additional](auto name){
-                    return additional.name == name;
-                }) != ns_range.end();
-            })
-            | ranges::views::filter([](auto& additional){
-                return std::get_if<Dns::DnsAnswer::A>(&additional.record);
-            })
-            | ranges::views::transform([](auto& additional){
-                return std::get<Dns::DnsAnswer::A>(additional.record).ip4Addr;
-            });
-        return {resolved_ns_ipv4.begin(), resolved_ns_ipv4.end()};
-    }
+
 
 
     QueryType  get_query_type(uint16_t query_num) {
