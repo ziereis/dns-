@@ -65,12 +65,49 @@ TEST_CASE("BufferParser read") {
 
 TEST_CASE("packet building")
 {
-    auto packet = Dns::DnsPacket::generate(10, false, false);
-    packet.add_question("google.com", 1);
+    SUBCASE("question")
+    {
+        auto packet = Dns::DnsPacket::generate(10, false, false);
+        packet.add_question(Dns::DnsQuestion{"google.com", 1,1});
 
-    CHECK_EQ(10, packet.header_.id);
-    CHECK_EQ(1, packet.header_.question_count);
-    CHECK_EQ("google.com", packet.questions[0].name);
+        CHECK_EQ(10, packet.header_.id);
+        CHECK_EQ(1, packet.header_.question_count);
+        CHECK_EQ("google.com", packet.questions[0].name);
+
+    }
+    SUBCASE("answer") {
+        auto packet = Dns::DnsPacket::generate(10, false, false);
+        Dns::DnsAnswer answer{"google.com", static_cast<Dns::QueryType>(1), 1, 999, 10, Dns::DnsAnswer::A{15612}};
+        packet.add_answer(std::move(answer));
+
+        CHECK_EQ(10, packet.header_.id);
+        CHECK_EQ(1, packet.header_.answer_count);
+        CHECK_EQ("google.com", packet.answers.front().name);
+        CHECK_EQ(ip::address_v4{15612}, std::get<Dns::DnsAnswer::A>(packet.answers.front().record).ip4Addr);
+    }
+    SUBCASE("authority")
+    {
+        auto packet = Dns::DnsPacket::generate(10, false, false);
+        Dns::DnsAnswer answer{"google.com", static_cast<Dns::QueryType>(1), 1, 999, 10, Dns::DnsAnswer::NS{"glabl.yam"}};
+        packet.add_authority(std::move(answer));
+
+        CHECK_EQ(10, packet.header_.id);
+        CHECK_EQ(1, packet.header_.authority_count);
+        CHECK_EQ("google.com", packet.authorities.front().name);
+        CHECK_EQ("glabl.yam", std::get<Dns::DnsAnswer::NS>(packet.authorities.front().record).name);
+    }
+    SUBCASE("additional")
+    {
+        auto packet = Dns::DnsPacket::generate(10, false, false);
+        Dns::DnsAnswer answer{"google.com", static_cast<Dns::QueryType>(1), 1, 999, 10, Dns::DnsAnswer::A{15612}};
+        packet.add_additional(std::move(answer));
+
+        CHECK_EQ(10, packet.header_.id);
+        CHECK_EQ(1, packet.header_.addtional_count);
+        CHECK_EQ(1, packet.additionals.size());
+        CHECK_EQ("google.com", packet.additionals.front().name);
+        CHECK_EQ(ip::address_v4{15612}, std::get<Dns::DnsAnswer::A>(packet.answers.front().record).ip4Addr);
+    }
 
 }
 
@@ -137,7 +174,7 @@ TEST_CASE("buffer generation from packet")
     SUBCASE("write default_packet")
     {
         auto packet = Dns::DnsPacket::generate(10, true, true);
-        packet.add_question("google.com", 1);
+        packet.add_question(Dns::DnsQuestion{"google.com", 1,1});
         Dns::BufferBuilder builder{packet};
         auto buf = builder.build_and_get_buf();
 
@@ -172,7 +209,7 @@ TEST_CASE("requests")
         socket.bind(me, ec);
 
         auto packet = Dns::DnsPacket::generate(10, false, true);
-        packet.add_question("google.com", 1);
+        packet.add_question(Dns::DnsQuestion{"google.com", 1,1});
         Dns::BufferBuilder builder{packet};
         auto buf = builder.build_and_get_buf();
 
@@ -201,7 +238,7 @@ TEST_CASE("requests")
         socket.bind(me, ec);
 
         auto packet = Dns::DnsPacket::generate(10, false, true);
-        packet.add_question("google.com", 1);
+        packet.add_question(Dns::DnsQuestion{"google.com", 1,1});
         Dns::BufferBuilder builder{packet};
         auto buf = builder.build_and_get_buf();
 
@@ -232,7 +269,7 @@ TEST_CASE("requests")
         socket.bind(me, ec);
 
         auto packet = Dns::DnsPacket::generate(10, false, true);
-        packet.add_question("google.com", 1);
+        packet.add_question(Dns::DnsQuestion{"google.com", 1, 1});
         Dns::BufferBuilder builder{packet};
         auto buf = builder.build_and_get_buf();
 
@@ -472,6 +509,34 @@ TEST_CASE("BufferParser dns_answer")
                  std::get<Dns::DnsAnswer::A>(answer.record).ip4Addr.to_string());
     }
 
+}
+
+TEST_CASE("getting answers from packet")
+{
+    SUBCASE("answer")
+    {
+        auto packet = Dns::DnsPacket::generate(10, false, false);
+        Dns::DnsAnswer answer{"google.com", static_cast<Dns::QueryType>(1), 1, 999, 10, Dns::DnsAnswer::A{15612}};
+        packet.add_answer(std::move(answer));
+
+        auto rng = packet.get_answers();
+        CHECK_EQ(ip::udp::endpoint(ip::address_v4{15612},53), rng.front());
+    }
+    SUBCASE("unresolved")
+    {
+        auto packet = Dns::DnsPacket::generate(10, false, false);
+        Dns::DnsAnswer answer{"google.com", static_cast<Dns::QueryType>(1), 1, 999, 10, Dns::DnsAnswer::NS{"glabl.yam"}};
+        packet.add_authority(std::move(answer));
+
+        auto rng = packet.get_unresolved_ns("google.com");
+        CHECK_EQ(rng.front(), std::get<Dns::DnsAnswer::NS>(packet.authorities.front().record).name);
+
+    }
+
+    SUBCASE("resolved")
+    {
+
+    }
 }
 
 std::array<uint8_t, DNS_BUF_SIZE> get_buf_from_file(const std::string& filename)

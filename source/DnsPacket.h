@@ -172,10 +172,13 @@ namespace Dns
 
         static DnsPacket generate(uint16_t id, bool response, bool recursion);
 
-        void add_question(std::string name, uint16_t type);
+        void add_question(DnsQuestion&& question);
+        void add_answer(DnsAnswer&& answer);
+        void add_authority(DnsAnswer&& authority);
+        void add_additional(DnsAnswer&& answer);
 
         //have to implement here idk how to return a range
-        auto get_unresolved_ns(std::string_view qname) {
+        auto get_unresolved_ns(std::string_view qname)const {
             auto ns_range = authorities
                    | ranges::views::filter([qname](auto& auth){
                 return qname.ends_with(auth.name)
@@ -187,7 +190,7 @@ namespace Dns
             return ns_range;
         }
 
-        auto get_resolved_ns(std::string_view qname) {
+        auto get_resolved_ns(std::string_view qname) const {
             auto ns_range = get_unresolved_ns(qname);
 
             auto resolved_ns_ipv4 = additionals
@@ -203,6 +206,17 @@ namespace Dns
                 return std::get<Dns::DnsAnswer::A>(additional.record).ip4Addr;
             });
             return resolved_ns_ipv4;
+        }
+
+        auto get_answers() const {
+            auto eps = answers
+                            | ranges::views::filter([](auto& answer) {
+                return std::get_if<Dns::DnsAnswer::A>(&answer.record);
+            })
+                            | ranges::views::transform([](auto& answer){
+                return ip::udp::endpoint(std::get<Dns::DnsAnswer::A>(answer.record).ip4Addr, 53);
+            });
+            return eps;
         }
 
         friend std::ostream &operator<<(std::ostream &os, const DnsPacket &packet);

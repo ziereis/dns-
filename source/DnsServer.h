@@ -20,10 +20,29 @@ namespace Dns
         "202.12.27.33",
     };
 
-    static const std::array<ip::udp::endpoint , 13> root_server_eps{};
+    std::array<ip::udp::endpoint, 13> generate_root_server_eps(std::span<const std::string_view> ips);
 
-    static std::array<ip::udp::endpoint, 13> generate_root_server_eps {
-        std::vector<ip::udp::endpoint> result;
+    static const std::array<ip::udp::endpoint , 13> root_server_eps = generate_root_server_eps(root_server_strs);
+
+    struct LookupTarget{
+        ip::udp::endpoint ep_;   // copy
+        std::deque<ip::udp::endpoint> available_endpoints_;
+        std::array<uint8_t, DNS_BUF_SIZE> buf_;
+        std::size_t buf_size_;
+        ip::udp::socket& socket_;
+    };
+
+    struct InnerLookupTarget{
+        std::deque<ip::udp::endpoint> available_endpoints_;
+        std::span<uint8_t> buf_view_;
+        ip::udp::socket& socket_;
+    };
+
+    struct LookupServer {
+        ip::udp::endpoint& ep_;   // copy
+        std::array<uint8_t, DNS_BUF_SIZE> buf_;
+        //std::size_t buf_size_;
+        ip::udp::socket& socket_;
     };
 
     class LookupHandler
@@ -31,43 +50,52 @@ namespace Dns
     {
     public:
         LookupHandler(std::span<const uint8_t> buf_view,ip::udp::socket& lookup_socket,
-                      ip::udp::socket& client_socket, ip::udp::endpoint client);
+                      ip::udp::socket& client_socket, ip::udp::endpoint client_ep);
 
         void start();
 
         void handle_lookup(const boost::system::error_code& ec,
-                           size_t bytes_read);
+                           size_t bytes_sent);
 
         void handle_server_response(const boost::system::error_code& ec,
                                     size_t bytes_read);
+
+        template<typename T>
+        requires std::is_same_v<T, LookupTarget> || std::is_same_v<T, InnerLookupTarget>
+        void handle_contains_additional(T& target, const DnsPacket&);
+
     struct NsLookup{};
     struct ClientLookup{};
 
-    struct lookupStateVisitorForStart{
+    struct VisitorForStart{
         void operator()(ClientLookup& /**/) const;
         void operator()(NsLookup& /**/) const;
 
         LookupHandler* handler;
     };
 
-    struct lookupStateVisitorForHandlingServerResponse{
+    struct VisitorForFinishedRequest{
         void operator()(ClientLookup& /**/) const;
         void operator()(NsLookup& /**/) const;
 
         LookupHandler* handler;
+        DnsPacket& packet;
         std::size_t response_size;
     };
 
+    struct VisitorForContainsAdditional{
+        void operator()(ClientLookup& /**/) const;
+        void operator()(NsLookup& /**/) const;
+
+        LookupHandler* handler;
+        DnsPacket& packet;
+    };
+
     private:
-        std::stack<ip::udp::endpoint> lookup_servers;
         std::variant<NsLookup,ClientLookup> lookupState;
-        ip::udp::socket& lookup_socket_;   //ref is okay server always lives longer
-        ip::udp::socket& client_socket_;   //ref is okay server always lives longer
-        ip::udp::endpoint client_;   // copy
-        std::array<uint8_t, DNS_BUF_SIZE> original_req_buf_; //copy with memcpy
-        std::size_t original_req_buf_size_;
-        std::array<uint8_t, DNS_BUF_SIZE> buf_; // for lookups
-        std::size_t buf_size_;
+        LookupTarget client;
+        LookupServer server;
+        InnerLookupTarget unresolved_server;
     };
 
     class DnsServer

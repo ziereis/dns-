@@ -44,9 +44,23 @@ namespace Dns
         return packet;
     }
 
-    void DnsPacket::add_question(std::string name, uint16_t type) {
+    void DnsPacket::add_question(DnsQuestion&& question) {
         ++header_.question_count;
-        questions.emplace_back(DnsQuestion{name, type, 1});
+        questions.emplace_back(question);
+    }
+    void DnsPacket::add_answer(DnsAnswer &&answer) {
+        ++header_.answer_count;
+        answers.emplace_back(answer);
+    }
+
+    void DnsPacket::add_authority(DnsAnswer &&authority) {
+        ++header_.authority_count;
+        authorities.emplace_back(authority);
+    }
+
+    void DnsPacket::add_additional(DnsAnswer &&additional) {
+        ++header_.addtional_count;
+        additionals.emplace_back(additional);
     }
 
     std::ostream &operator<<(std::ostream &os, const DnsPacket &packet) {
@@ -65,8 +79,6 @@ namespace Dns
             os << q << std::endl;
         return os;
     }
-
-
 
 
 
