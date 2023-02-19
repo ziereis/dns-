@@ -192,19 +192,26 @@ namespace Dns
 
         auto get_resolved_ns(std::string_view qname) const {
             auto ns_range = get_unresolved_ns(qname);
-
+            for (auto a : ns_range)
+            {
+                std::cout << a << " ";
+            }
+            std::cout << std::endl;
             auto resolved_ns_ipv4 = additionals
                                     | ranges::views::filter([&ns_range](auto& additional){
-                return ranges::find_if(ns_range,[&additional](auto name){
-                    return additional.name == name;
-                }) != ns_range.end();
-            })
+                                        std::cout << additional.name << std::endl;
+                                        return std::find_if(ns_range.begin(), ns_range.end(),[&additional](auto name){
+                                            std::cout << additional.name << std::endl;
+                                            std::cout << name << std::endl;
+                                            return additional.name == name;
+                                        }) != ns_range.end();
+                                    })
                                     | ranges::views::filter([](auto& additional){
-                return std::get_if<Dns::DnsAnswer::A>(&additional.record);
-            })
+                                        return std::get_if<Dns::DnsAnswer::A>(&additional.record);
+                                    })
                                     | ranges::views::transform([](auto& additional){
-                return std::get<Dns::DnsAnswer::A>(additional.record).ip4Addr;
-            });
+                                        return std::get<Dns::DnsAnswer::A>(additional.record).ip4Addr;
+                                    });
             return resolved_ns_ipv4;
         }
 

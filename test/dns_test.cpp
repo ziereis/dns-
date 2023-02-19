@@ -106,7 +106,7 @@ TEST_CASE("packet building")
         CHECK_EQ(1, packet.header_.addtional_count);
         CHECK_EQ(1, packet.additionals.size());
         CHECK_EQ("google.com", packet.additionals.front().name);
-        CHECK_EQ(ip::address_v4{15612}, std::get<Dns::DnsAnswer::A>(packet.answers.front().record).ip4Addr);
+        CHECK_EQ(ip::address_v4{15612}, std::get<Dns::DnsAnswer::A>(packet.additionals.front().record).ip4Addr);
     }
 
 }
@@ -529,12 +529,25 @@ TEST_CASE("getting answers from packet")
         packet.add_authority(std::move(answer));
 
         auto rng = packet.get_unresolved_ns("google.com");
+
+        auto itt = ranges::find_if(rng, [](auto s) {return s == "google.com";});
         CHECK_EQ(rng.front(), std::get<Dns::DnsAnswer::NS>(packet.authorities.front().record).name);
 
     }
 
     SUBCASE("resolved")
     {
+        auto packet = Dns::DnsPacket::generate(10, false, false);
+        Dns::DnsAnswer answer{"ns.com", static_cast<Dns::QueryType>(1), 1, 999, 10, Dns::DnsAnswer::A{15612}};
+        packet.add_additional(std::move(answer));
+
+        Dns::DnsAnswer auth{"com", static_cast<Dns::QueryType>(1), 1, 999, 10, Dns::DnsAnswer::NS{"ns.com"}};
+        packet.add_authority(std::move(auth));
+
+        auto rng = packet.get_resolved_ns("google.com");
+        std::vector<ip::address_v4> vec{rng.begin(), rng.end()};
+        CHECK_EQ(vec.size(), 1);
+        CHECK_EQ(rng.front(), std::get<Dns::DnsAnswer::A>(packet.additionals.front().record).ip4Addr);
 
     }
 }
