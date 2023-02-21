@@ -164,7 +164,7 @@ namespace Dns
 
         DnsPacket(const uint8_t* buf, std::size_t bytes_read);
         DnsPacket() = default;
-        Dns::DnsHeader header_;
+        Dns::DnsHeader header_{};
         std::vector<DnsQuestion> questions;
         std::vector<DnsAnswer> answers;
         std::vector<DnsAnswer> authorities;
@@ -178,7 +178,7 @@ namespace Dns
         void add_additional(DnsAnswer&& answer);
 
         //have to implement here idk how to return a range
-        auto get_unresolved_ns(std::string_view qname)const {
+        [[nodiscard]] auto get_unresolved_ns(std::string_view qname)const {
             auto ns_range = authorities
                    | ranges::views::filter([qname](auto& auth){
                 return qname.ends_with(auth.name)
@@ -190,21 +190,13 @@ namespace Dns
             return ns_range;
         }
 
-        auto get_resolved_ns(std::string_view qname) const {
+        [[nodiscard]] auto get_resolved_ns(std::string_view qname) const {
             auto ns_range = get_unresolved_ns(qname);
-            for (auto a : ns_range)
-            {
-                std::cout << a << " ";
-            }
-            std::cout << std::endl;
             auto resolved_ns_ipv4 = additionals
-                                    | ranges::views::filter([&ns_range](auto& additional){
-                                        std::cout << additional.name << std::endl;
-                                        return std::find_if(ns_range.begin(), ns_range.end(),[&additional](auto name){
-                                            std::cout << additional.name << std::endl;
-                                            std::cout << name << std::endl;
+                                    | ranges::views::filter([rng = std::move(ns_range)](auto& additional) mutable{
+                                        return std::find_if(rng.begin(), rng.end(),[&additional](auto name){
                                             return additional.name == name;
-                                        }) != ns_range.end();
+                                        }) != rng.end();
                                     })
                                     | ranges::views::filter([](auto& additional){
                                         return std::get_if<Dns::DnsAnswer::A>(&additional.record);
@@ -215,13 +207,13 @@ namespace Dns
             return resolved_ns_ipv4;
         }
 
-        auto get_answers() const {
+        [[nodiscard]] auto get_answers() const {
             auto eps = answers
                             | ranges::views::filter([](auto& answer) {
                 return std::get_if<Dns::DnsAnswer::A>(&answer.record);
             })
                             | ranges::views::transform([](auto& answer){
-                return ip::udp::endpoint(std::get<Dns::DnsAnswer::A>(answer.record).ip4Addr, 53);
+                return std::get<Dns::DnsAnswer::A>(answer.record).ip4Addr;
             });
             return eps;
         }

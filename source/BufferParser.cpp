@@ -42,26 +42,19 @@ namespace Dns
         return {name, query_type, query_class, ttl,
                 len, std::move(record)};
     }
-
     DnsAnswer::DnsRecord BufferParser::read_record(QueryType query_type){
         switch (query_type) {
             case QueryType::A:
-                LOG("A");
                 return DnsAnswer::A{read<uint32_t>()};
             case QueryType::AAA:
-                LOG("AAA");
                 return DnsAnswer::AAA{read_ipv6()};
             case QueryType::NS:
-                LOG("NS");
                 return DnsAnswer::NS{read_name()};
             case QueryType::CNAME:
-                LOG("CNAME");
                 return DnsAnswer::CNAME{read_name()};
             case QueryType::MX:
-                LOG("MX");
                 return DnsAnswer::MX{read<uint16_t>(), read_name()};
             default:
-                LOG("UNKNOWN");
                 return DnsAnswer::Unknown{};
         }
     }

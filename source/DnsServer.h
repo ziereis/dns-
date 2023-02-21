@@ -1,5 +1,7 @@
 #include <boost/asio.hpp>
 #include "DnsPacket.h"
+#include <unordered_set>
+
 using namespace boost::asio;
 
 namespace Dns
@@ -20,26 +22,31 @@ namespace Dns
         "202.12.27.33",
     };
 
-    std::array<ip::udp::endpoint, 13> generate_root_server_eps(std::span<const std::string_view> ips);
+    std::array<uint32_t, 13> generate_root_server_ipv4s(std::span<const std::string_view> ips);
 
-    static const std::array<ip::udp::endpoint , 13> root_server_eps = generate_root_server_eps(root_server_strs);
+    static const std::array<uint32_t, 13> root_server_ip4s = generate_root_server_ipv4s(root_server_strs);
 
     struct LookupTarget{
         ip::udp::endpoint ep_;   // copy
-        std::deque<ip::udp::endpoint> available_endpoints_;
+
+        std::unordered_set<std::string> visited_names;
+        std::unordered_set<uint32_t> visited_endpoints;
+        std::deque<uint32_t> available_endpoints_;
         std::array<uint8_t, DNS_BUF_SIZE> buf_;
         std::size_t buf_size_;
         ip::udp::socket& socket_;
     };
 
     struct InnerLookupTarget{
-        std::deque<ip::udp::endpoint> available_endpoints_;
-        std::span<uint8_t> buf_view_;
-        ip::udp::socket& socket_;
+        std::unordered_set<std::string> visited_names;
+        std::unordered_set<uint32_t> visited_endpoints;
+        std::deque<uint32_t> available_endpoints_;
+        std::array<uint8_t, DNS_BUF_SIZE> buf_;
+        std::size_t buf_size_;
     };
 
     struct LookupServer {
-        ip::udp::endpoint& ep_;   // copy
+        ip::udp::endpoint ep_;   // copy
         std::array<uint8_t, DNS_BUF_SIZE> buf_;
         //std::size_t buf_size_;
         ip::udp::socket& socket_;
@@ -63,6 +70,10 @@ namespace Dns
         template<typename T>
         requires std::is_same_v<T, LookupTarget> || std::is_same_v<T, InnerLookupTarget>
         void handle_contains_additional(T& target, const DnsPacket&);
+
+        template<typename T>
+        requires std::is_same_v<T, LookupTarget> || std::is_same_v<T, InnerLookupTarget>
+        void add_endpoint_to_server(T& target);
 
     struct NsLookup{};
     struct ClientLookup{};

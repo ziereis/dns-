@@ -193,6 +193,19 @@ TEST_CASE("buffer generation from packet")
         CHECK_EQ(1, question.query_type);
     }
 
+    SUBCASE("write and parse")
+    {
+        auto packet = Dns::DnsPacket::generate(10, true, true);
+        packet.add_question(Dns::DnsQuestion{"google.com", 1,1});
+        Dns::BufferBuilder builder{packet};
+        auto buf = builder.build_and_get_buf();
+
+        Dns::DnsPacket pkt{buf.data(),buf.size()};
+
+        CHECK_EQ(pkt.questions.front().name, "google.com");
+
+    }
+
 }
 
 TEST_CASE("requests")
