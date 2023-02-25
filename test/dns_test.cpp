@@ -1,7 +1,6 @@
 //
 // Created by thomas on 04.02.23.
 //
-
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
 #include <numeric>
@@ -10,7 +9,8 @@
 #include "BufferParser.h"
 #include <boost/asio.hpp>
 #include "bitset"
-#include <boost/asio.hpp>
+#include <thread>
+#include "DnsServer.h"
 
 using namespace boost::asio;
 
@@ -18,7 +18,7 @@ TEST_CASE("BufferParser read") {
     SUBCASE("uint8_t")
     {
         std::array<uint8_t,1> buf{0b0101'1101};
-        uint8_t reference = static_cast<uint8_t>(buf[0]);
+        auto reference = static_cast<uint8_t>(buf[0]);
         Dns::BufferParser parser{std::span(buf)};
         auto parsed =  parser.read<uint8_t>();
         INFO("reference Value: ", std::bitset<8>(reference));
@@ -28,7 +28,7 @@ TEST_CASE("BufferParser read") {
     SUBCASE("uint16_t")
     {
         std::array<uint8_t,2> buf{0b0101'1101, 0b0100'0010};
-        uint16_t reference = static_cast<uint16_t>(buf[0]) << 8 | static_cast<uint16_t>(buf[1]);
+        auto reference = static_cast<uint16_t>(static_cast<uint16_t>(buf[0]) << 8 | static_cast<uint16_t>(buf[1]));
         Dns::BufferParser parser{std::span(buf)};
         auto parsed =  parser.read<uint16_t>();
         INFO("reference Value: ", std::bitset<16>(reference));
@@ -52,8 +52,8 @@ TEST_CASE("BufferParser read") {
     SUBCASE("consecutive Reads")
     {
         std::array<uint8_t,4> buf{0b0101'1101, 0b0100'0010, 0b0000'0001, 0b0010'1101};
-        uint16_t first_ref = static_cast<uint16_t>(buf[0]) << 8 | static_cast<uint16_t>(buf[1]);
-        uint16_t second_ref = static_cast<uint16_t>(buf[2]) << 8 | static_cast<uint16_t>(buf[3]);
+        auto first_ref = static_cast<uint16_t>(static_cast<uint16_t>(buf[0]) << 8 | static_cast<uint16_t>(buf[1]));
+        auto second_ref = static_cast<uint16_t>(static_cast<uint16_t>(buf[2]) << 8 | static_cast<uint16_t>(buf[3]));
 
         Dns::BufferParser parser{std::span(buf)};
         auto first_parsed =  parser.read<uint16_t>();
@@ -306,9 +306,9 @@ std::vector<uint8_t> generate_buffer_from_label_vec(std::span<std::string> domai
     std::vector<uint8_t> buf;
     for (auto& label : domain)
     {
-        buf.push_back(label.size());
+        buf.push_back(static_cast<unsigned char>(label.size()));
         for (char c : label)
-            buf.push_back(c);
+            buf.push_back(static_cast<unsigned char>(c));
     }
     buf.push_back(0);
 
@@ -459,8 +459,10 @@ TEST_CASE("BufferParser dns_question")
         auto ref_name = std::accumulate(domain.begin(), domain.end(), std::string{}, [](auto sum, auto str)
         { return sum + str + ".";});
         ref_name.pop_back();
-        uint16_t ref_type = static_cast<uint16_t>(buf[size_of_name]) << 8 | static_cast<uint16_t>(buf[size_of_name + 1]);
-        uint16_t ref_class = static_cast<uint16_t>(buf[size_of_name + 2]) << 8 | static_cast<uint16_t>(buf[size_of_name + 3]);
+        auto ref_type = static_cast<uint16_t>(static_cast<uint16_t>(buf[size_of_name]) << 8 |
+                                                  static_cast<uint16_t>(buf[size_of_name + 1]));
+        auto ref_class = static_cast<uint16_t>(static_cast<uint16_t>(buf[size_of_name + 2]) << 8 |
+                                                   static_cast<uint16_t>(buf[size_of_name + 3]));
         INFO("reference name: ", ref_name);
         INFO("parsed name: ", question.name);
         INFO("reference type: ", std::bitset<16>(ref_type));
@@ -480,7 +482,6 @@ TEST_CASE("BufferParser dns_answer")
     {
         std::vector<std::string> domain{"www", "coolio","com"};
         auto buf = generate_buffer_from_label_vec(domain);
-        auto size_of_name = buf.size();
         //type
         buf.push_back(0b0000'0000);
         buf.push_back(0b0000'0001);
@@ -533,7 +534,7 @@ TEST_CASE("getting answers from packet")
         packet.add_answer(std::move(answer));
 
         auto rng = packet.get_answers();
-        CHECK_EQ(ip::udp::endpoint(ip::address_v4{15612},53), rng.front());
+        CHECK_EQ(ip::address_v4{15612}, rng.front());
     }
     SUBCASE("unresolved")
     {
@@ -543,7 +544,6 @@ TEST_CASE("getting answers from packet")
 
         auto rng = packet.get_unresolved_ns("google.com");
 
-        auto itt = ranges::find_if(rng, [](auto s) {return s == "google.com";});
         CHECK_EQ(rng.front(), std::get<Dns::DnsAnswer::NS>(packet.authorities.front().record).name);
 
     }
@@ -565,17 +565,50 @@ TEST_CASE("getting answers from packet")
     }
 }
 
-std::array<uint8_t, DNS_BUF_SIZE> get_buf_from_file(const std::string& filename)
-{
-    char cbuf[DNS_BUF_SIZE];
-    std::array<uint8_t, DNS_BUF_SIZE> buf{};
-    std::ifstream file(filename, std::ios::in | std::ios::binary);
-    file.read(cbuf, DNS_BUF_SIZE);
+TEST_CASE("big tests") {
+    // main has to be running for this tests
+    SUBCASE("most common webpages") {
+        io_context ctx;
+        boost::system::error_code ec;
+        ip::udp::socket socket(ctx);
 
-    for (int i = 0; i < DNS_BUF_SIZE; i++)
-        buf[i] = static_cast<uint8_t>(cbuf[i]);
+        ip::udp::endpoint me(ip::address_v4::any(), 991);
+        ip::udp::endpoint server(ip::address::from_string("127.0.0.1"), 2053);
 
-    return buf;
+        socket.open(ip::udp::v4(), ec);
+        socket.bind(me, ec);
 
+        std::vector<std::string_view> pages{"google.com", "youtube.com",
+                                            "facebook.com", "twitter.com",
+                                            "instagram.com","wikipedia.org",
+                                            "baidu.com","yandex.ru",
+                                            "yahoo.com", "xvideos.com"};
+
+        auto packets = pages
+                | ranges::views::transform([](const auto url) {
+                    auto packet = Dns::DnsPacket::generate(1, false, true);
+                    packet.add_question(Dns::DnsQuestion{url.data(), 1, 1});
+                    return packet;
+                });
+
+        for (const auto& packet : packets) {
+            Dns::BufferBuilder builder{packet};
+            auto buf = builder.build_and_get_buf();
+
+            socket.send_to(buffer(buf.data(), buf.size()), server);
+
+            std::array<uint8_t, DNS_BUF_SIZE> recv_buf{};
+            std::cout << "waiting" << std::endl;
+            size_t bytes_received = socket.receive(buffer(recv_buf));
+
+            Dns::DnsPacket in_packet{recv_buf.data(), bytes_received};
+            INFO(packet);
+            INFO(in_packet);
+            CHECK_EQ(0,  in_packet.header_.get_response_code());
+            CHECK(!(in_packet.answers | ranges::views::filter([](auto& answer) {
+                return answer.query_type == Dns::QueryType::A;
+            })).empty());
+        }
+    }
 }
 

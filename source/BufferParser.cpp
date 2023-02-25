@@ -199,7 +199,7 @@ namespace Dns
             return std::string_view(&*rng.begin(), ranges::distance(rng));
         });
         for (auto label : rng){
-            write<uint8_t>(label.size());
+            write<uint8_t>(static_cast<unsigned char>(label.size()));
             for (auto& c : label)
                 write<std::byte>(std::byte(c));
         }
@@ -213,7 +213,6 @@ namespace Dns
     }
 
     void BufferBuilder::buildPacket() {
-        std::array<uint8_t, DNS_BUF_SIZE> buf{};
         write_header(packet.header_);
         for (auto & q : packet.questions)
             write_question(q);
