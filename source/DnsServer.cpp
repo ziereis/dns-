@@ -28,6 +28,15 @@ namespace Dns
         void operator()(boost::system::error_code ec, std::size_t bytes_read)
         {
             if (ec) throw std::system_error(ec);
+            fmt::print("Handling lookup for: {}\n", client->address().to_string());
+            DnsPacket packet{buf_, bytes_read};
+
+            fmt::print("with the Questions\n");
+
+            for (const auto& q : packet.questions) {
+                std::cout << q << std::endl;
+            }
+
             auto lookup_handler = std::make_shared<LookupHandler>(
                     std::span<uint8_t>(buf_, bytes_read),  lookup_socket_, client_socket_, *client);
             lookup_handler->start();
